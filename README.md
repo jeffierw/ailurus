@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="ailurus-web/public/logo.png" alt="Ailurus logo" width="420" />
+</p>
+
 # Ailurus
 
 **A creator subscription platform on Sui — Google login, USDC subscriptions, Walrus storage & Seal paywalls, zero gas.**
@@ -196,7 +200,7 @@ Full setup: [docs/TESTNET.md](docs/TESTNET.md)
 | Phase | Status |
 |-------|--------|
 | **Phase 1 — Hackathon MVP (current)** | Testnet: login, subscribe, Walrus upload, Seal unlock |
-| **Phase 2 — Mainnet (Aug 2026)** | Mainnet contracts, Enoki production config, creator onboarding |
+| **Phase 2 — Mainnet (July 2026)** | Mainnet contracts, Enoki production config, creator onboarding |
 | **Phase 3 — Growth** | Multi-OAuth, analytics, recommendation feed, Enoki Connect |
 
 ---
