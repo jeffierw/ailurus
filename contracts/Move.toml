@@ -1,0 +1,8 @@
+[package]
+name = "ailurus"
+edition = "2024"
+
+[dependencies]
+
+[addresses]
+ailurus = "0x0"

@@ -1,0 +1,21 @@
+{
+  "name": "ailurus-worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mysten/enoki": "^1.1.1",
+    "@mysten/sui": "^2.19.0",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260617.0",
+    "typescript": "~6.0.2",
+    "wrangler": "^4.55.0"
+  }
+}

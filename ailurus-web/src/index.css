@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-cream: #faf9f7;
+  --color-surface: #ffffff;
+  --color-border: #efefef;
+  --color-muted: #737373;
+  --color-ink: #171717;
+  --color-panda: #c45c4a;
+  --color-panda-light: #f5e6e3;
+  --color-panda-dark: #8b3d32;
+  --color-accent: #c45c4a;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

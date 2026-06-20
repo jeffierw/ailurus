@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ailurus-sponsor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "SUI_NETWORK": "testnet",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173",
+    "AILURUS_PACKAGE_ID": "0xe5f702358b711a236c618ed60c2e084964356e190f350f804c40396230355937",
+    "AILURUS_PLATFORM_ID": "0xf6f9d588ace7dbf1f9d1739b677f6d31e412108176fb1ce50cf96d32a593cada",
+    "SUI_MAX_DRIP_AMOUNT": "1000000000"
+  }
+}
