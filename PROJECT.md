@@ -167,7 +167,7 @@
 - [ ] Walrus 上传管线（Cetus + SDK）
 - [ ] Enoki 赞助 gas
 
-### Phase 2 — Mainnet（2026.08 前）
+### Phase 2 — Mainnet（2026.07）
 - Mainnet 部署 Move 合约
 - Enoki mainnet 配置
 - 创作者 onboarding 与合规提示

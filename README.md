@@ -195,6 +195,17 @@ Full setup: [docs/TESTNET.md](docs/TESTNET.md)
 
 ---
 
+## Demo assets
+
+| Asset | Path |
+|-------|------|
+| Overflow deck (simplified) | [docs/ailurus-overflow-demo-deck.pptx](docs/ailurus-overflow-demo-deck.pptx) |
+| Demo video (Testnet walkthrough) | [demo/ailurus-overflow-demo.mp4](demo/ailurus-overflow-demo.mp4) |
+
+Deck structure follows Overflow submission rhythm: problem overview → product demo → conclusion & vision. Regenerate the deck with `uv run scripts/generate-demo-deck.py`.
+
+---
+
 ## Roadmap
 
 | Phase | Status |
