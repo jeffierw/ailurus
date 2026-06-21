@@ -1,3 +1,4 @@
+import { useCurrentAccount } from '@mysten/dapp-kit-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
@@ -5,22 +6,20 @@ import { PostMedia } from '../feed/PostMedia';
 import { PostEngagementBar } from '../feed/PostEngagementBar';
 import { useModal } from '../../context/useModal';
 import { useIsSubscribedTo, usePostById } from '../../hooks/usePlatformData';
-import { Lock } from 'lucide-react';
+import { SubscriberLockBadge } from '../ui/SubscriberLockBadge';
 
 export function PostModal({ open }: { open: boolean }) {
-  const { modalData, closeModal, appState, openModal } = useModal();
+  const account = useCurrentAccount();
+  const { modalData, closeModal, openModal } = useModal();
   const post = usePostById(modalData.postId);
-  const isSubscribedOnChain = useIsSubscribedTo(post?.creatorId, appState.address);
+  const isSubscribedOnChain = useIsSubscribedTo(post?.creatorId, account?.address);
 
   if (!post) return null;
 
   const isOwnPost =
-    appState.address && post.creatorId.toLowerCase() === appState.address.toLowerCase();
-  const isSubscribed =
-    isSubscribedOnChain ||
-    isOwnPost ||
-    appState.subscribedCreators.includes(post.creatorId);
-  const isLocked = post.isLocked && !isSubscribed;
+    account?.address && post.creatorId.toLowerCase() === account.address.toLowerCase();
+  const canAccessLockedContent = isSubscribedOnChain || Boolean(isOwnPost);
+  const isLocked = post.isLocked && !canAccessLockedContent;
 
   const handleUnlock = () => {
     closeModal();
@@ -40,17 +39,14 @@ export function PostModal({ open }: { open: boolean }) {
             post={post}
             aspect="aspect-square"
             showPreview={!isLocked}
-            viewerAddress={appState.address}
-            canDecrypt={Boolean(isOwnPost) || isSubscribed}
+            viewerAddress={account?.address}
+            canDecrypt={canAccessLockedContent}
             enableAlbumNav
             className="rounded-t-3xl sm:rounded-t-3xl"
           />
           {isLocked && (
             <div className="absolute inset-0 backdrop-blur-xl bg-black/20 flex flex-col items-center justify-center gap-3">
-              <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center">
-                <Lock className="w-6 h-6 text-panda" />
-              </div>
-              <p className="text-white font-semibold text-sm drop-shadow">Subscribers only</p>
+              <SubscriberLockBadge size="lg" showLabel />
               <Button size="sm" onClick={handleUnlock}>
                 Subscribe to unlock
               </Button>

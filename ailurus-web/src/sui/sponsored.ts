@@ -3,6 +3,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import { toBase64 } from '@mysten/utils';
 import type { UiWallet } from '@wallet-standard/ui';
+import { logAppError, toUserFacingMessage, UserFacingError } from '../lib/userFacingError';
 import { AILURUS_CONFIG } from './config';
 
 type SignTransactionFn = (args: { transaction: string | Transaction }) => Promise<{ signature: string }>;
@@ -34,10 +35,14 @@ export async function signAndExecuteWithSponsor(input: {
 
     if (!createRes.ok) {
       const err = await createRes.json().catch(() => ({}));
-      throw new Error(
+      logAppError('sponsor/create', err);
+      const technical =
         typeof err === 'object' && err && 'error' in err
           ? String((err as { error: string }).error)
-          : `Sponsor create failed (${createRes.status})`,
+          : `Sponsor create failed (${createRes.status})`;
+      throw new UserFacingError(
+        technical,
+        toUserFacingMessage(err, 'Could not prepare transaction. Please try again.'),
       );
     }
 
@@ -51,10 +56,14 @@ export async function signAndExecuteWithSponsor(input: {
 
     if (!executeRes.ok) {
       const err = await executeRes.json().catch(() => ({}));
-      throw new Error(
+      logAppError('sponsor/execute', err);
+      const technical =
         typeof err === 'object' && err && 'error' in err
           ? String((err as { error: string }).error)
-          : `Sponsor execute failed (${executeRes.status})`,
+          : `Sponsor execute failed (${executeRes.status})`;
+      throw new UserFacingError(
+        technical,
+        toUserFacingMessage(err, 'Could not complete transaction. Please try again.'),
       );
     }
 
@@ -62,5 +71,8 @@ export async function signAndExecuteWithSponsor(input: {
     return sponsored.digest;
   }
 
-  throw new Error('Sponsored execution unavailable');
+  throw new UserFacingError(
+    'Sponsored execution unavailable',
+    'Transaction sponsorship is unavailable. Please try again.',
+  );
 }

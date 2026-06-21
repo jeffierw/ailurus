@@ -3,6 +3,7 @@ module ailurus::platform;
 use std::string::String;
 use sui::clock::Clock;
 use sui::coin::Coin;
+use sui::dynamic_field as df;
 use sui::event;
 
 const MONTH_MS: u64 = 30 * 24 * 60 * 60 * 1000;
@@ -91,6 +92,10 @@ public struct Subscribed has copy, drop {
     creator: address,
     paid_micros: u64,
     expires_at_ms: u64,
+}
+
+public struct CreatorAvatarKey has copy, drop, store {
+    owner: address,
 }
 
 fun init(_: PLATFORM, ctx: &mut TxContext) {
@@ -247,6 +252,45 @@ public fun creator_count(platform: &Platform): u64 {
 
 public fun post_count(platform: &Platform): u64 {
     platform.post_count
+}
+
+/// Returns true when a creator already uses this handle (case-sensitive string match).
+public fun creator_handle_taken(platform: &Platform, handle: &String): bool {
+    let mut i = 0;
+    let len = platform.creators.length();
+    while (i < len) {
+        if (&platform.creators[i].handle == handle) {
+            return true
+        };
+        i = i + 1;
+    };
+    false
+}
+
+public fun update_creator_profile(
+    platform: &mut Platform,
+    name: String,
+    bio: String,
+    ctx: &mut TxContext,
+) {
+    let creator = creator_mut(platform, ctx.sender());
+    creator.name = name;
+    creator.bio = bio;
+}
+
+public fun set_creator_avatar(
+    platform: &mut Platform,
+    avatar_walrus_id: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    let owner = ctx.sender();
+    let (exists, _) = find_creator(platform, owner);
+    assert!(exists, ECreatorNotFound);
+    let key = CreatorAvatarKey { owner };
+    if (df::exists_(&platform.id, key)) {
+        df::remove<CreatorAvatarKey, vector<u8>>(&mut platform.id, key);
+    };
+    df::add(&mut platform.id, key, avatar_walrus_id);
 }
 
 public fun has_active_subscription(

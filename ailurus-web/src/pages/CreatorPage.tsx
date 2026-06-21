@@ -1,7 +1,9 @@
+import { useCurrentAccount } from '@mysten/dapp-kit-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { BadgeCheck, Lock } from 'lucide-react';
+import { BadgeCheck } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
+import { SubscriberLockBadge } from '../components/ui/SubscriberLockBadge';
 import { PostMedia } from '../components/feed/PostMedia';
 import { useModal } from '../context/useModal';
 import { formatCount } from '../lib/format';
@@ -15,13 +17,14 @@ import { isSuiAddress } from '../lib/routes';
 
 export function CreatorPage() {
   const { id } = useParams();
-  const { appState, openModal, chainConfigured } = useModal();
+  const account = useCurrentAccount();
+  const { openModal, chainConfigured } = useModal();
   const slug = id ?? '';
   const { data: onChainCreator, isLoading } = useResolvedCreator(slug);
   const { creator } = useCreatorModel(slug);
   const creatorAddress = onChainCreator?.owner ?? (isSuiAddress(slug) ? slug : null);
   const { posts: creatorPosts } = useCreatorPosts(creatorAddress);
-  const isSubscribedOnChain = useIsSubscribedTo(creatorAddress ?? undefined, appState.address);
+  const isSubscribedOnChain = useIsSubscribedTo(creatorAddress ?? undefined, account?.address);
 
   if (creator && creator.handle) {
     const handleSlug = creator.handle.replace(/^@/, '');
@@ -46,13 +49,11 @@ export function CreatorPage() {
   }
 
   const isOwnProfile =
-    appState.address &&
-    creator.address.toLowerCase() === appState.address.toLowerCase();
+    account?.address &&
+    creator.address.toLowerCase() === account.address.toLowerCase();
 
-  const isSubscribed =
-    isSubscribedOnChain ||
-    Boolean(isOwnProfile) ||
-    appState.subscribedCreators.includes(creator.id);
+  const isSubscribed = isSubscribedOnChain || Boolean(isOwnProfile);
+  const canAccessLockedContent = isSubscribedOnChain || Boolean(isOwnProfile);
 
   return (
     <div className="max-w-lg mx-auto md:max-w-xl">
@@ -115,7 +116,7 @@ export function CreatorPage() {
 
       <div className="grid grid-cols-3 gap-0.5 border-t border-border">
         {creatorPosts.map((post) => {
-          const locked = post.isLocked && !isSubscribed;
+          const locked = post.isLocked && !canAccessLockedContent;
           return (
             <button
               key={post.id}
@@ -125,15 +126,15 @@ export function CreatorPage() {
             >
               <PostMedia
                 post={post}
-                aspect="aspect-square"
+                fill
                 className="absolute inset-0"
                 showPreview={!locked}
-                viewerAddress={appState.address}
-                canDecrypt={Boolean(isOwnProfile) || isSubscribed}
+                viewerAddress={account?.address}
+                canDecrypt={canAccessLockedContent}
               />
               {locked && (
-                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-white" />
+                <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none">
+                  <SubscriberLockBadge size="sm" />
                 </div>
               )}
             </button>

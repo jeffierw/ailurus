@@ -1,8 +1,9 @@
 import { createDAppKit } from '@mysten/dapp-kit-react';
 import { enokiWalletsInitializer } from '@mysten/enoki';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { AILURUS_CONFIG, GRPC_URLS, SUI_NETWORKS, type SuiNetwork } from './config';
+import { walletStorage } from '../lib/walletStorage';
 import { getStoredNetwork } from '../lib/networkConfig';
+import { AILURUS_CONFIG, GRPC_URLS, SUI_NETWORKS, type SuiNetwork } from './config';
 
 const redirectUrl =
   typeof window === 'undefined' ? undefined : `${window.location.origin}/`;
@@ -31,7 +32,7 @@ export const dAppKit = createDAppKit({
       baseUrl: GRPC_URLS[network as SuiNetwork],
     }),
   autoConnect: true,
-  storage: globalThis.localStorage,
+  storage: walletStorage,
   storageKey: 'ailurus_dappkit',
   walletInitializers: initializers,
 });

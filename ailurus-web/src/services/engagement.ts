@@ -1,11 +1,3 @@
-import {
-  localAddComment,
-  localGetEngagement,
-  localToggleLike,
-  localToggleSave,
-  localUpsertEngagement,
-} from './engagementLocal';
-
 const SPONSOR_URL =
   (import.meta.env.VITE_SPONSOR_WORKER_URL as string | undefined) ??
   'https://ailurus-sponsor.jeffier2015.workers.dev';
@@ -44,55 +36,30 @@ async function engagementFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 export async function fetchEngagement(postIds: string[]) {
   if (postIds.length === 0) return [] as PostEngagement[];
-  try {
-    const query = encodeURIComponent(postIds.join(','));
-    const result = await engagementFetch<{ posts: PostEngagement[] }>(
-      `/engagement?postIds=${query}`,
-    );
-    for (const post of result.posts) {
-      localUpsertEngagement(post);
-    }
-    return result.posts;
-  } catch {
-    return localGetEngagement(postIds);
-  }
+  const query = encodeURIComponent(postIds.join(','));
+  const result = await engagementFetch<{ posts: PostEngagement[] }>(
+    `/engagement?postIds=${query}`,
+  );
+  return result.posts;
 }
 
 export async function toggleLike(postId: string, address: string) {
-  try {
-    const result = await engagementFetch<{ post: PostEngagement }>('/engagement/like', {
-      method: 'POST',
-      body: JSON.stringify({ postId, address }),
-    });
-    localUpsertEngagement(result.post);
-    return result;
-  } catch {
-    return { post: localToggleLike(postId, address) };
-  }
+  return engagementFetch<{ post: PostEngagement }>('/engagement/like', {
+    method: 'POST',
+    body: JSON.stringify({ postId, address }),
+  });
 }
 
 export async function addComment(postId: string, address: string, text: string) {
-  try {
-    const result = await engagementFetch<{ post: PostEngagement }>('/engagement/comment', {
-      method: 'POST',
-      body: JSON.stringify({ postId, address, text }),
-    });
-    localUpsertEngagement(result.post);
-    return result;
-  } catch {
-    return { post: localAddComment(postId, address, text) };
-  }
+  return engagementFetch<{ post: PostEngagement }>('/engagement/comment', {
+    method: 'POST',
+    body: JSON.stringify({ postId, address, text }),
+  });
 }
 
 export async function toggleSave(postId: string, address: string) {
-  try {
-    const result = await engagementFetch<{ post: PostEngagement }>('/engagement/save', {
-      method: 'POST',
-      body: JSON.stringify({ postId, address }),
-    });
-    localUpsertEngagement(result.post);
-    return result;
-  } catch {
-    return { post: localToggleSave(postId, address) };
-  }
+  return engagementFetch<{ post: PostEngagement }>('/engagement/save', {
+    method: 'POST',
+    body: JSON.stringify({ postId, address }),
+  });
 }

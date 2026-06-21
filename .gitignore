@@ -46,3 +46,7 @@ Thumbs.db
 
 # Local overrides
 *.local
+
+# Demo binaries (generate locally; do not commit)
+*.mp4
+*.pptx

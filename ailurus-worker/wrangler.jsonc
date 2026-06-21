@@ -6,9 +6,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "SUI_NETWORK": "testnet",
-    "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173",
-    "AILURUS_PACKAGE_ID": "0xe5f702358b711a236c618ed60c2e084964356e190f350f804c40396230355937",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://ailurus.wal.app",
+    "AILURUS_PACKAGE_ID": "0x55bc531b35f0d0d63e4baa15cb90f693163bc6eba8040854cd27e869f28bfe0d",
     "AILURUS_PLATFORM_ID": "0xf6f9d588ace7dbf1f9d1739b677f6d31e412108176fb1ce50cf96d32a593cada",
-    "SUI_MAX_DRIP_AMOUNT": "1000000000"
+    "AILURUS_PROFILE_REGISTRY_ID": "0x701cdfec75bd4ac49def6f1e612862348a12591e73c5838284f8e08c1fc4627a",
+    "SUI_MAX_DRIP_AMOUNT": "1000000000",
+    "USDC_MAX_DRIP_AMOUNT": "1000000"
   }
 }

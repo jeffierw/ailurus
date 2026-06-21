@@ -61,6 +61,29 @@ async function main() {
   }
 
   try {
+    const res = await fetch(`${SPONSOR_URL}/testnet/upload-funds`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://ailurus.wal.app',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'Content-Type',
+      },
+    });
+    const acao = res.headers.get('access-control-allow-origin');
+    results.push({
+      name: 'CORS preflight upload-funds (ailurus.wal.app)',
+      ok: res.status === 204 && acao === 'https://ailurus.wal.app',
+      detail: `status=${res.status}, acao=${acao ?? 'missing'}`,
+    });
+  } catch (e) {
+    results.push({
+      name: 'CORS preflight upload-funds (ailurus.wal.app)',
+      ok: false,
+      detail: String(e),
+    });
+  }
+
+  try {
     const res = await fetch(`${SPONSOR_URL}/engagement?postIds=smoke-1`);
     const body = await res.json();
     const deployed = res.ok && Array.isArray(body.posts);

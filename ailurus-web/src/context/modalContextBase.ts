@@ -38,8 +38,6 @@ export type AppState = {
   address?: string;
   username: string | null;
   displayName: string | null;
-  balanceUsdc: number;
-  subscribedCreators: string[];
   isCreator: boolean;
   creatorPriceUsdc: number;
   onboardingCompleted: boolean;
@@ -80,16 +78,16 @@ export type ModalContextValue = {
   modalData: ModalData;
   appState: AppState;
   authReady: boolean;
+  creatorCheckReady: boolean;
   chainConfigured: boolean;
   openModal: (type: ModalType, data?: ModalData) => void;
   closeModal: () => void;
   login: () => Promise<void>;
   logout: () => void;
-  setUsername: (username: string) => void;
+  setUsername: (username: string) => Promise<void>;
   completeOnboarding: (intent: UserIntent) => void;
-  addBalance: (amount: number) => void;
   subscribe: (creatorId: string, creatorAddress: string, priceUsdc: number) => Promise<void>;
-  registerCreator: (input: CreatorRegistration) => Promise<void>;
+  registerCreator: (input: CreatorRegistration) => Promise<{ skippedOnChainRegistration: boolean }>;
   publishPost: (input: UploadPipelineInput, options?: { onProgress?: UploadProgressHandler }) => Promise<void>;
   extendWalrusStorage: (
     input: { blobObjectId: string; epochs: number; postId?: string },

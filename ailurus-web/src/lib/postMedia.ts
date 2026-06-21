@@ -1,11 +1,8 @@
+import { parseSealObjectId } from './sealStorage';
+
 /** Comma-separated Walrus media ids (Sui object ids or blob ids) stored in sealObjectId for albums. */
 export function parseStoredMediaIds(sealObjectId: string): string[] {
-  const trimmed = sealObjectId.trim();
-  if (!trimmed) return [];
-  if (trimmed.includes(',')) {
-    return trimmed.split(',').map((id) => id.trim()).filter(Boolean);
-  }
-  return [trimmed];
+  return parseSealObjectId(sealObjectId).mediaIds;
 }
 
 export function primaryPostMediaId(sealObjectId: string, walrusBlobId: string) {

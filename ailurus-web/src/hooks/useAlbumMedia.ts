@@ -1,11 +1,12 @@
-import { useCurrentClient } from '@mysten/dapp-kit-react';
-import { useDAppKit } from '@mysten/dapp-kit-react';
+import { useCurrentAccount, useCurrentClient } from '@mysten/dapp-kit-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import type { Post } from '../data/models';
 import { listAlbumMedia, type AlbumMediaRef } from '../services/albumMedia';
+import { parseSealObjectId, sealMetaForMediaIndex } from '../lib/sealStorage';
 import { cacheWalrusObjectUrl } from '../services/walrusMediaCache';
 import { bytesToObjectUrl, decryptWalrusMedia } from '../services/sealMedia';
+import { useSealPersonalMessageSign } from './useSealPersonalMessageSign';
 
 export type AlbumSlide = AlbumMediaRef & {
   url: string | null;
@@ -19,8 +20,10 @@ type AlbumState = {
   error: string | null;
 };
 
-const decryptedUrlCache = new Map<string, string>();
-const decryptedInflight = new Map<string, Promise<string>>();
+import { getDecryptedInflightCache, getDecryptedUrlCache } from '../lib/decryptedMediaCache';
+
+const decryptedUrlCache = getDecryptedUrlCache();
+const decryptedInflight = getDecryptedInflightCache();
 
 function slideCacheKey(mediaId: string, viewerAddress: string, creatorId: string) {
   return `${mediaId}:${viewerAddress.toLowerCase()}:${creatorId.toLowerCase()}`;
@@ -30,6 +33,7 @@ async function resolveSlideUrl(options: {
   client: SuiGrpcClient;
   slide: AlbumMediaRef;
   post: Post;
+  slideIndex: number;
   viewerAddress?: string;
   signPersonalMessage: (message: Uint8Array) => Promise<{ signature: string }>;
 }) {
@@ -49,11 +53,15 @@ async function resolveSlideUrl(options: {
   const inflight = decryptedInflight.get(cacheKey);
   if (inflight) return inflight;
 
+  const parsedSeal = parseSealObjectId(post.sealObjectId);
+  const inlineMeta = sealMetaForMediaIndex(parsedSeal.meta, options.slideIndex, slide.mediaId);
+
   const load = decryptWalrusMedia({
     client: options.client,
     walrusObjectId: slide.mediaId,
     creatorAddress: post.creatorId,
     viewerAddress,
+    inlineMeta,
     signPersonalMessage: options.signPersonalMessage,
   })
     .then(({ bytes, contentType }) => {
@@ -81,11 +89,12 @@ export function useAlbumMedia(
   },
 ) {
   const client = useCurrentClient();
-  const dAppKit = useDAppKit();
+  const account = useCurrentAccount();
+  const signPersonalMessage = useSealPersonalMessageSign();
   const clientRef = useRef(client);
-  const dAppKitRef = useRef(dAppKit);
+  const signRef = useRef(signPersonalMessage);
   clientRef.current = client;
-  dAppKitRef.current = dAppKit;
+  signRef.current = signPersonalMessage;
 
   const albumKey = `${post.walrusBlobId}:${post.sealObjectId}`;
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -129,7 +138,10 @@ export function useAlbumMedia(
       if (!slide || slide.url || slide.loading) return;
 
       if (post.isLocked && !options.canDecrypt) return;
-      if (post.isLocked && !options.viewerAddress) return;
+
+      const viewerAddress = account?.address ?? options.viewerAddress;
+      if (post.isLocked && !viewerAddress) return;
+      if (post.isLocked && !account?.address) return;
 
       setState((prev) => ({
         ...prev,
@@ -143,11 +155,9 @@ export function useAlbumMedia(
           client: clientRef.current as SuiGrpcClient,
           slide,
           post,
-          viewerAddress: options.viewerAddress,
-          signPersonalMessage: async (message) => {
-            const result = await dAppKitRef.current.signPersonalMessage({ message });
-            return { signature: result.signature };
-          },
+          slideIndex: index,
+          viewerAddress,
+          signPersonalMessage: (message) => signRef.current(message),
         });
         setState((prev) => ({
           ...prev,
@@ -170,7 +180,7 @@ export function useAlbumMedia(
         }));
       }
     },
-    [options.canDecrypt, options.viewerAddress, post, state.slides],
+    [account?.address, options.canDecrypt, options.viewerAddress, post, state.slides],
   );
 
   useEffect(() => {

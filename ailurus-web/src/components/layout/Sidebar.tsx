@@ -11,7 +11,9 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useModal } from '../../context/useModal';
-import { useShowUsdcDeposit } from '../../hooks/useShowUsdcDeposit';
+import { useUsdcBalance } from '../../hooks/useUsdcBalance';
+import { useWalletAuth } from '../../hooks/useWalletAuth';
+import { formatUsdc } from '../../lib/formatUsdc';
 import { Button } from '../ui/Button';
 
 const navItems = [
@@ -25,8 +27,9 @@ const navItems = [
 
 export function Sidebar() {
   const navigate = useNavigate();
-  const { appState, openModal } = useModal();
-  const showUsdcDeposit = useShowUsdcDeposit();
+  const { openModal } = useModal();
+  const { isLoggedIn, isConnecting } = useWalletAuth();
+  const { balanceUsdc } = useUsdcBalance();
 
   return (
     <aside className="hidden md:flex flex-col w-64 xl:w-72 shrink-0 border-r border-border bg-surface h-dvh sticky top-0 px-4 py-6">
@@ -71,9 +74,9 @@ export function Sidebar() {
         >
           <Wallet className="w-5 h-5" />
           Wallet
-          {appState.isLoggedIn && (
+          {isLoggedIn && (
             <span className="ml-auto text-xs font-semibold text-panda">
-              ${appState.balanceUsdc.toFixed(2)}
+              ${formatUsdc(balanceUsdc)}
             </span>
           )}
         </NavLink>
@@ -92,24 +95,24 @@ export function Sidebar() {
       </div>
 
       <div className="mt-auto pt-6">
-        {appState.isLoggedIn ? (
+        {isConnecting ? (
+          <div className="p-4 rounded-2xl bg-cream border border-border text-center text-sm text-muted">
+            Reconnecting wallet…
+          </div>
+        ) : isLoggedIn ? (
           <div className="p-4 rounded-2xl bg-cream border border-border">
             <p className="text-xs text-muted mb-1">USDC balance</p>
-            <p className="text-2xl font-bold text-ink">${appState.balanceUsdc.toFixed(2)}</p>
-            {showUsdcDeposit && (
-              <Button
-                size="sm"
-                className="w-full mt-3"
-                onClick={() => openModal('deposit')}
-              >
-                Add funds
-              </Button>
-            )}
-            {!showUsdcDeposit && (
-              <p className="text-xs text-muted mt-3 leading-relaxed">
-                Testnet mode — uploads use WAL faucet. USDC deposit is mainnet only.
-              </p>
-            )}
+            <p className="text-2xl font-bold text-ink">${formatUsdc(balanceUsdc)}</p>
+            <Button
+              size="sm"
+              className="w-full mt-3"
+              onClick={() => openModal('deposit')}
+            >
+              Add funds
+            </Button>
+            <p className="text-xs text-muted mt-3 leading-relaxed">
+              Testnet USDC faucet — up to $1 per request.
+            </p>
           </div>
         ) : (
           <Button size="lg" className="w-full" onClick={() => openModal('login')}>

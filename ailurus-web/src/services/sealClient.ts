@@ -1,6 +1,7 @@
 import { SealClient } from '@mysten/seal';
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
-import { AILURUS_CONFIG } from '../sui/config';
+import { fromHex } from '@mysten/bcs';
+import { AILURUS_CONFIG, getSealPackageId } from '../sui/config';
 
 let cachedSeal: SealClient | null = null;
 
@@ -11,7 +12,7 @@ export function getSealThreshold() {
 }
 
 export function hasSealConfig() {
-  return Boolean(AILURUS_CONFIG.packageId && AILURUS_CONFIG.sealKeyServers.length > 0);
+  return Boolean(getSealPackageId() && AILURUS_CONFIG.sealKeyServers.length > 0);
 }
 
 export function getSealClient(suiClient: SuiGrpcClient) {
@@ -29,5 +30,5 @@ export function getSealClient(suiClient: SuiGrpcClient) {
 }
 
 export function sealKeyIdBytes(sealKeyId: string) {
-  return new TextEncoder().encode(sealKeyId);
+  return fromHex(sealKeyId);
 }

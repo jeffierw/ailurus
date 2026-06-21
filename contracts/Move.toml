@@ -1,8 +1,9 @@
 [package]
 name = "ailurus"
 edition = "2024"
+published-at = "0x55bc531b35f0d0d63e4baa15cb90f693163bc6eba8040854cd27e869f28bfe0d"
 
 [dependencies]
 
 [addresses]
-ailurus = "0x0"
+ailurus = "0x55bc531b35f0d0d63e4baa15cb90f693163bc6eba8040854cd27e869f28bfe0d"

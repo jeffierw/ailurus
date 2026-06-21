@@ -5,7 +5,6 @@ export const currentUser = {
   name: 'You',
   handle: '@guest',
   avatar: 'https://api.dicebear.com/9.x/thumbs/svg?seed=guest',
-  balanceUsdc: 0,
   isLoggedIn: false,
   isCreator: false,
 };

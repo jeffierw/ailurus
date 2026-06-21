@@ -3,14 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useCurrentAccount } from '@mysten/dapp-kit-react';
 import { toast } from 'sonner';
 import { consumeLoginIntent, consumePendingPostLogin } from '../lib/authSession';
-import { loadProfile } from '../lib/profileStorage';
 import { useModal } from '../context/useModal';
 
 export function PostLoginHandler() {
   const account = useCurrentAccount();
   const location = useLocation();
   const navigate = useNavigate();
-  const { modal, modalData, appState, authReady, openModal, closeModal } = useModal();
+  const { modal, modalData, appState, authReady, creatorCheckReady, openModal, closeModal } =
+    useModal();
   const handledRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function PostLoginHandler() {
       handledRef.current = null;
       return;
     }
-    if (!authReady) return;
+    if (!authReady || !creatorCheckReady) return;
     if (handledRef.current === account.address) return;
     handledRef.current = account.address;
 
@@ -27,13 +27,8 @@ export function PostLoginHandler() {
     }
 
     const isFreshLogin = consumePendingPostLogin();
-    const profile = loadProfile(account.address);
     const hasCompletedOnboarding =
-      appState.onboardingCompleted ||
-      Boolean(profile.onboardingCompleted) ||
-      Boolean(appState.userIntent) ||
-      Boolean(profile.userIntent) ||
-      appState.isCreator;
+      appState.onboardingCompleted || Boolean(appState.userIntent) || appState.isCreator;
 
     if (isFreshLogin && !hasCompletedOnboarding) {
       openModal('onboarding');
@@ -49,17 +44,38 @@ export function PostLoginHandler() {
 
     const intent = modalData.loginIntent ?? consumeLoginIntent() ?? 'default';
 
+    if (intent === 'deposit') {
+      openModal('deposit');
+      toast.success('Signed in — add testnet USDC to subscribe');
+      return;
+    }
+
+    if (intent === 'subscribe' && modalData.creatorId && modalData.creatorAddress) {
+      if (!appState.username && !appState.isCreator) {
+        openModal('username');
+      } else {
+        openModal('subscribe', {
+          creatorId: modalData.creatorId,
+          creatorAddress: modalData.creatorAddress,
+          creatorName: modalData.creatorName,
+          priceUsdc: modalData.priceUsdc,
+        });
+      }
+      toast.success('Signed in — continue subscribing');
+      return;
+    }
+
     if (intent === 'subscribe' || intent === 'deposit' || intent === 'create') {
       if (!appState.username && !appState.isCreator) {
         openModal('username');
       }
-      if (intent === 'create') {
+      if (intent === 'create' && !appState.isCreator) {
         openModal('become-creator');
       }
       if (location.pathname === '/') {
         navigate(intent === 'create' ? '/create' : '/feed', { replace: true });
       }
-      toast.success('Welcome back!');
+      toast.success(appState.isCreator ? 'Welcome back, creator!' : 'Welcome back!');
       return;
     }
 
@@ -79,10 +95,14 @@ export function PostLoginHandler() {
     appState.username,
     appState.userIntent,
     authReady,
+    creatorCheckReady,
     closeModal,
     location.pathname,
     modal,
-    modalData.loginIntent,
+    modalData.creatorId,
+    modalData.creatorAddress,
+    modalData.creatorName,
+    modalData.priceUsdc,
     navigate,
     openModal,
   ]);

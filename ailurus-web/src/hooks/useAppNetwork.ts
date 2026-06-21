@@ -21,6 +21,10 @@ export function useAppNetwork() {
 
   const switchNetwork = useCallback(
     async (next: SuiNetwork) => {
+      if (next === 'mainnet') {
+        toast.info('Mainnet is coming soon — stay on Testnet for now.');
+        return;
+      }
       if (next === network) return;
       setStoredNetwork(next);
       await dAppKit.switchNetwork(next);

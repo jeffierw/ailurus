@@ -1,10 +1,12 @@
+import { useCurrentAccount } from '@mysten/dapp-kit-react';
 import { Link } from 'react-router-dom';
-import { Lock, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import type { Post } from '../../data/models';
 import { formatCount } from '../../lib/format';
 import { useIsSubscribedTo } from '../../hooks/usePlatformData';
 import { usePostEngagement } from '../../hooks/useEngagement';
 import { Avatar } from '../ui/Avatar';
+import { SubscriberLockBadge } from '../ui/SubscriberLockBadge';
 import { PostMedia } from './PostMedia';
 import { PostEngagementBar } from './PostEngagementBar';
 import { useModal } from '../../context/useModal';
@@ -14,16 +16,14 @@ type PostCardProps = {
 };
 
 export function PostCard({ post }: PostCardProps) {
-  const { appState, openModal } = useModal();
-  const isSubscribedOnChain = useIsSubscribedTo(post.creatorId, appState.address);
-  const { engagement } = usePostEngagement(post.id, appState.address);
+  const account = useCurrentAccount();
+  const { openModal } = useModal();
+  const isSubscribedOnChain = useIsSubscribedTo(post.creatorId, account?.address);
+  const { engagement } = usePostEngagement(post.id, account?.address);
   const isOwnPost =
-    appState.address && post.creatorId.toLowerCase() === appState.address.toLowerCase();
-  const isSubscribed =
-    isSubscribedOnChain ||
-    isOwnPost ||
-    appState.subscribedCreators.includes(post.creatorId);
-  const isLocked = post.isLocked && !isSubscribed;
+    account?.address && post.creatorId.toLowerCase() === account.address.toLowerCase();
+  const canAccessLockedContent = isSubscribedOnChain || Boolean(isOwnPost);
+  const isLocked = post.isLocked && !canAccessLockedContent;
 
   const openPost = () => openModal('post', { postId: post.id });
 
@@ -46,14 +46,12 @@ export function PostCard({ post }: PostCardProps) {
         <PostMedia
           post={post}
           showPreview={!isLocked}
-          viewerAddress={appState.address}
-          canDecrypt={Boolean(isOwnPost) || isSubscribed}
+          viewerAddress={account?.address}
+          canDecrypt={canAccessLockedContent}
         />
         {isLocked && (
           <div className="absolute inset-0 backdrop-blur-md bg-black/10 flex flex-col items-center justify-center gap-2 pointer-events-none">
-            <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-sm">
-              <Lock className="w-5 h-5 text-panda" />
-            </div>
+            <SubscriberLockBadge size="md" showLabel />
             <span className="text-white text-sm font-semibold drop-shadow">Subscribe to unlock</span>
           </div>
         )}

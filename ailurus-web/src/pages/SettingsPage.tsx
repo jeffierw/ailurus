@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ChevronRight, Shield, Bell, Globe, LogOut, User } from 'lucide-react';
 import { useModal } from '../context/useModal';
+import { useFanProfile } from '../hooks/useFanProfile';
+import { useOwnAvatarWalrusId } from '../hooks/useOwnAvatarWalrusId';
+import { usePlatformSnapshot } from '../hooks/usePlatformData';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
 import { NetworkSwitcher } from '../components/NetworkSwitcher';
-import { loadProfile, getAvatarWalrusId } from '../lib/profileStorage';
 import { creatorAvatar } from '../lib/format';
+import { logAppError, toUserFacingMessage } from '../lib/userFacingError';
 
 export function SettingsPage() {
   const { logout, appState, updateProfile } = useModal();
+  const { data: fanProfile } = useFanProfile(appState.address);
+  const ownAvatarWalrusId = useOwnAvatarWalrusId(appState.address);
+  const { data: platform } = usePlatformSnapshot();
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [priceUsdc, setPriceUsdc] = useState('');
@@ -17,13 +23,34 @@ export function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const ownCreator = useMemo(() => {
+    if (!appState.address || !platform) return null;
+    return (
+      platform.creators.find(
+        (creator) => creator.owner.toLowerCase() === appState.address!.toLowerCase(),
+      ) ?? null
+    );
+  }, [appState.address, platform]);
+
   useEffect(() => {
     if (!appState.address) return;
-    const profile = loadProfile(appState.address);
-    setDisplayName(profile.displayName ?? appState.displayName ?? '');
-    setBio(profile.bio ?? '');
-    setPriceUsdc(appState.isCreator ? String(appState.creatorPriceUsdc) : '');
-  }, [appState.address, appState.creatorPriceUsdc, appState.displayName, appState.isCreator]);
+    if (appState.isCreator && ownCreator) {
+      setDisplayName(ownCreator.name ?? appState.displayName ?? '');
+      setBio(ownCreator.bio ?? '');
+      setPriceUsdc(String(Number(ownCreator.priceMicros) / 1_000_000));
+      return;
+    }
+    setDisplayName(fanProfile?.displayName ?? appState.displayName ?? '');
+    setBio(fanProfile?.bio ?? '');
+    setPriceUsdc('');
+  }, [
+    appState.address,
+    appState.displayName,
+    appState.isCreator,
+    fanProfile?.bio,
+    fanProfile?.displayName,
+    ownCreator,
+  ]);
 
   const handleAvatarChange = (file: File | null) => {
     setAvatarFile(file);
@@ -64,8 +91,9 @@ export function SettingsPage() {
       toast.success('Profile updated');
       handleAvatarChange(null);
     } catch (error) {
+      logAppError('SettingsPage', error);
       toast.error('Could not save profile', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserFacingMessage(error, 'Please try again.'),
       });
     } finally {
       setIsSaving(false);
@@ -74,8 +102,7 @@ export function SettingsPage() {
 
   const avatarFallback =
     appState.address ? creatorAvatar(appState.address) : creatorAvatar('ailurus');
-  const avatarWalrusId =
-    !avatarPreview && appState.address ? getAvatarWalrusId(appState.address) : undefined;
+  const avatarWalrusId = !avatarPreview ? ownAvatarWalrusId : undefined;
 
   const settingsGroups = [
     {

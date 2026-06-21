@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && cp ws-resources.json dist/",
+    "deploy:site": "npm run build && site-builder --context mainnet deploy --epochs 5 dist",
     "lint": "eslint .",
     "preview": "vite preview"
   },

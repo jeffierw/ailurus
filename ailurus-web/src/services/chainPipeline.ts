@@ -1,7 +1,10 @@
 import { walrus, WalrusFile } from '@mysten/walrus';
+import { UserFacingError } from '../lib/userFacingError';
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
-import { AILURUS_CONFIG, hasOnChainConfig, missingConfigKeys } from '../sui/config';
+import { AILURUS_CONFIG, hasOnChainConfig, missingConfigKeys, getSealPackageId } from '../sui/config';
 import { DEFAULT_WALRUS_EPOCHS, clampEpochs } from '../lib/walrusEpochs';
+import { normalizeWalrusStoredMediaId } from '../lib/walrusMedia';
+import { encodeSealObjectId, type SealEncryptionMeta } from '../lib/sealStorage';
 import { createSealKeyId, wrapDekWithSeal } from './sealMedia';
 import { hasSealConfig } from './sealClient';
 
@@ -43,30 +46,57 @@ export type UploadPipelineResult = {
 
 export const ENCRYPTED_UPLOAD_PROGRESS_STEPS = [
   { id: 'encrypt', label: 'Encrypting with Seal envelope' },
+  { id: 'walrus-encode', label: 'Preparing Walrus storage' },
   {
-    id: 'walrus',
-    label: 'Storing on Walrus',
+    id: 'walrus-register',
+    label: 'Registering on Walrus',
     caption: 'Wallet may prompt to sign a Walrus storage tx.',
   },
-  { id: 'sign', label: 'Sign the transaction in your wallet' },
-  { id: 'broadcast', label: 'Broadcasting to Sui' },
+  { id: 'walrus-upload', label: 'Uploading slivers through Walrus relay' },
+  {
+    id: 'walrus-certify',
+    label: 'Certifying Walrus blob',
+    caption: 'Wallet may prompt to sign a certify tx.',
+  },
+  {
+    id: 'publish',
+    label: 'Sign the transaction in your wallet',
+    caption: 'Approve the publish post transaction.',
+  },
   { id: 'confirm', label: 'Confirming on-chain' },
 ] as const;
 
 export const PUBLIC_UPLOAD_PROGRESS_STEPS = [
+  { id: 'walrus-encode', label: 'Preparing Walrus storage' },
   {
-    id: 'walrus',
-    label: 'Uploading to Walrus',
+    id: 'walrus-register',
+    label: 'Registering on Walrus',
     caption: 'Wallet may prompt to sign a Walrus storage tx.',
   },
+  { id: 'walrus-upload', label: 'Uploading slivers through Walrus relay' },
+  {
+    id: 'walrus-certify',
+    label: 'Certifying Walrus blob',
+    caption: 'Wallet may prompt to sign a certify tx.',
+  },
+  {
+    id: 'publish',
+    label: 'Sign the transaction in your wallet',
+    caption: 'Approve the publish post transaction.',
+  },
+  { id: 'confirm', label: 'Confirming on-chain' },
+] as const;
+
+export const EXTEND_STORAGE_PROGRESS_STEPS = [
+  { id: 'extend', label: 'Extending Walrus storage' },
   { id: 'sign', label: 'Sign the transaction in your wallet' },
-  { id: 'broadcast', label: 'Broadcasting to Sui' },
   { id: 'confirm', label: 'Confirming on-chain' },
 ] as const;
 
 export type UploadProgressStepId =
   | (typeof ENCRYPTED_UPLOAD_PROGRESS_STEPS)[number]['id']
-  | (typeof PUBLIC_UPLOAD_PROGRESS_STEPS)[number]['id'];
+  | (typeof PUBLIC_UPLOAD_PROGRESS_STEPS)[number]['id']
+  | (typeof EXTEND_STORAGE_PROGRESS_STEPS)[number]['id'];
 
 export type UploadProgressState = {
   stepIndex: number;
@@ -103,6 +133,18 @@ type WalrusExtendableClient = {
         upload: (options?: { digest?: string }) => Promise<unknown>;
         certify: () => unknown;
         listFiles: () => Promise<{ id: string; blobId: string; blobObject?: unknown }[]>;
+      };
+      writeBlobFlow: (options: { blob: Uint8Array }) => {
+        encode: () => Promise<unknown>;
+        register: (options: {
+          epochs: number;
+          owner: string;
+          deletable: boolean;
+          attributes?: Record<string, string>;
+        }) => BuildableTransaction;
+        upload: (options?: { digest?: string }) => Promise<unknown>;
+        certify: () => unknown;
+        getBlob: () => Promise<{ blobId: string; blobObjectId: string }>;
       };
       extendBlobTransaction: (options: {
         blobObjectId: string;
@@ -183,23 +225,29 @@ export async function uploadContentWithWalrusSdk(
     }),
   );
 
+  let encryptionMeta: SealEncryptionMeta | undefined;
   const files = input.encrypted
     ? await createEncryptedFiles(input, {
         client: options.client as SuiGrpcClient,
         creatorAddress: options.address,
         onProgress,
         steps,
+      }).then((result) => {
+        encryptionMeta = result.meta;
+        return result.files;
       })
     : createPublicFiles(input);
 
   if (input.encrypted) {
     reportUploadProgress(onProgress, steps, 'encrypt', 'Seal-wrapped keys ready');
+  } else {
+    reportUploadProgress(onProgress, steps, 'walrus-encode', 'Preparing public media for Walrus');
   }
 
   const epochs = clampEpochs(input.epochs ?? DEFAULT_WALRUS_EPOCHS);
 
   const flow = client.walrus.writeFilesFlow({ files });
-  reportUploadProgress(onProgress, steps, 'walrus', 'Encoding quilt for Walrus storage');
+  reportUploadProgress(onProgress, steps, 'walrus-encode', 'Encoding quilt for Walrus storage');
   await flow.encode();
 
   const registerTx = flow.register({
@@ -208,7 +256,12 @@ export async function uploadContentWithWalrusSdk(
     deletable: true,
   });
 
-  reportUploadProgress(onProgress, steps, 'walrus', 'Estimating and funding testnet SUI + WAL for upload');
+  reportUploadProgress(
+    onProgress,
+    steps,
+    'walrus-register',
+    'Estimating storage cost — approve register tx in your wallet',
+  );
   await ensureTestnetUploadFunds({
     address: options.address,
     client: suiClient,
@@ -220,18 +273,24 @@ export async function uploadContentWithWalrusSdk(
     label: 'Register Walrus blob',
   });
   const registerDigest = extractDigest(registerResult);
-  reportUploadProgress(onProgress, steps, 'confirm', 'Waiting for Walrus register confirmation');
+  reportUploadProgress(onProgress, steps, 'walrus-upload', 'Waiting for register confirmation');
   await suiClient.waitForTransaction({ digest: registerDigest });
 
-  reportUploadProgress(onProgress, steps, 'walrus', 'Uploading slivers through Walrus relay');
+  reportUploadProgress(onProgress, steps, 'walrus-upload', 'Uploading slivers through Walrus relay');
   await flow.upload({ digest: registerDigest });
 
+  reportUploadProgress(
+    onProgress,
+    steps,
+    'walrus-certify',
+    'Approve certify tx in your wallet',
+  );
   const certifyResult = await options.signAndExecute({
     transaction: flow.certify(),
     label: 'Certify Walrus blob',
   });
   const certifyDigest = extractDigest(certifyResult);
-  reportUploadProgress(onProgress, steps, 'confirm', 'Waiting for Walrus certify confirmation');
+  reportUploadProgress(onProgress, steps, 'walrus-certify', 'Waiting for certify confirmation');
   await suiClient.waitForTransaction({ digest: certifyDigest });
 
   const storedFiles = await flow.listFiles();
@@ -239,10 +298,11 @@ export async function uploadContentWithWalrusSdk(
 
   // Album: store every quilt patch id on-chain (comma-separated). Display uses aggregator
   // by-quilt-patch-id — one HTTP request per image, no quilt index / SDK reads in the browser.
-  const isMultiFileAlbum = input.contentType === 'album' && storedFiles.length > 1;
-  const sealObjectId = isMultiFileAlbum
-    ? storedFiles.map((file) => file.id).join(',')
-    : storedFiles[0].id;
+  const mediaIds = storedFiles.map((file) => file.id);
+  const sealObjectId = encodeSealObjectId(
+    mediaIds,
+    input.encrypted ? encryptionMeta : undefined,
+  );
 
   return {
     ...policy,
@@ -279,18 +339,76 @@ export async function uploadAvatarToWalrus(
     signAndExecute: SignAndExecute;
   },
 ) {
-  const result = await uploadContentWithWalrusSdk(
-    {
-      fileName: file.name,
-      caption: 'avatar',
-      contentType: 'photo',
-      estimatedCostUsdc: 0.05,
-      encrypted: false,
-      files: [file],
+  const result = await uploadSingleBlobWithWalrusSdk(file, {
+    ...options,
+    attributes: {
+      'content-type': file.type || 'image/jpeg',
+      'ailurus-original-content-type': file.type || 'image/jpeg',
+      'ailurus-original-name': file.name,
+      'ailurus-role': 'avatar',
+      app: 'ailurus',
     },
-    options,
+  });
+  // Sui blob object id — one aggregator request via /by-object-id/, no quilt/SDK reads.
+  return normalizeWalrusStoredMediaId(result.blobObjectId);
+}
+
+async function uploadSingleBlobWithWalrusSdk(
+  file: UploadFileInput,
+  options: {
+    address: string;
+    client: unknown;
+    signAndExecute: SignAndExecute;
+    epochs?: number;
+    attributes?: Record<string, string>;
+  },
+) {
+  const suiClient = options.client as WalrusExtendableClient;
+  const client = suiClient.$extend(
+    walrus({
+      uploadRelay: {
+        host: AILURUS_CONFIG.walrusUploadRelayUrl,
+        sendTip: {
+          max: AILURUS_CONFIG.walrusUploadRelayTipMax,
+        },
+      },
+    }),
   );
-  return result.sealObjectId;
+
+  const epochs = clampEpochs(options.epochs ?? DEFAULT_WALRUS_EPOCHS);
+  const flow = client.walrus.writeBlobFlow({ blob: file.bytes });
+  await flow.encode();
+
+  const registerTx = flow.register({
+    epochs,
+    owner: options.address,
+    deletable: true,
+    attributes: options.attributes,
+  });
+
+  await ensureTestnetUploadFunds({
+    address: options.address,
+    client: suiClient,
+    registerTx,
+  });
+
+  const registerResult = await options.signAndExecute({
+    transaction: registerTx,
+    label: 'Register Walrus blob',
+  });
+  const registerDigest = extractDigest(registerResult);
+  await suiClient.waitForTransaction({ digest: registerDigest });
+
+  await flow.upload({ digest: registerDigest });
+
+  const certifyResult = await options.signAndExecute({
+    transaction: flow.certify(),
+    label: 'Certify Walrus blob',
+  });
+  const certifyDigest = extractDigest(certifyResult);
+  await suiClient.waitForTransaction({ digest: certifyDigest });
+
+  return flow.getBlob();
 }
 
 async function ensureTestnetUploadFunds(options: {
@@ -422,7 +540,11 @@ async function requestTestnetUploadFunds(address: string, walAmount: bigint, sui
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? `Testnet upload funding failed (${response.status})`);
+    console.error('[Ailurus] upload-funds worker error', payload);
+    throw new UserFacingError(
+      payload.error ?? `Testnet upload funding failed (${response.status})`,
+      'Upload credits are temporarily unavailable. Please try again in a moment.',
+    );
   }
 }
 
@@ -507,9 +629,12 @@ async function createEncryptedFiles(
     dek: rawDek,
   });
 
-  return Promise.all(
+  const ivs: string[] = [];
+  const files = await Promise.all(
     input.files.map(async (sourceFile, index) => {
       const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ivBase64 = toBase64(iv);
+      ivs.push(ivBase64);
       const plaintext = sourceFile.bytes.buffer.slice(
         sourceFile.bytes.byteOffset,
         sourceFile.bytes.byteOffset + sourceFile.bytes.byteLength,
@@ -527,7 +652,7 @@ async function createEncryptedFiles(
           'ailurus-original-name': sourceFile.name,
           'ailurus-content-kind': input.contentType,
           'ailurus-encryption': 'AES-256-GCM',
-          'ailurus-iv': toBase64(iv),
+          'ailurus-iv': ivBase64,
           'ailurus-seal-id': sealKeyId,
           'ailurus-wrapped-dek': wrappedDek,
           'ailurus-creator': options.creatorAddress,
@@ -536,6 +661,16 @@ async function createEncryptedFiles(
       });
     }),
   );
+
+  return {
+    files,
+    meta: {
+      sealKeyId,
+      wrappedDek,
+      ivs,
+      sealPackageId: getSealPackageId(),
+    },
+  };
 }
 
 function buildWalrusIdentifier(fileName: string, index: number) {
@@ -588,7 +723,7 @@ export async function extendWalrusBlob(
   },
 ) {
   const epochs = clampEpochs(options.epochs);
-  const steps = PUBLIC_UPLOAD_PROGRESS_STEPS;
+  const steps = EXTEND_STORAGE_PROGRESS_STEPS;
   const suiClient = options.client as WalrusExtendableClient;
   const client = suiClient.$extend(
     walrus({
@@ -599,7 +734,7 @@ export async function extendWalrusBlob(
     }),
   );
 
-  reportUploadProgress(options.onProgress, steps, 'walrus', `Extending storage by ${epochs} epoch(s)`);
+  reportUploadProgress(options.onProgress, steps, 'extend', `Extending storage by ${epochs} epoch(s)`);
 
   if (AILURUS_CONFIG.defaultNetwork === 'testnet') {
     await requestTestnetUploadFunds(options.address, 100_000_000n, 30_000_000n);

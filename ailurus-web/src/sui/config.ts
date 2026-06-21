@@ -10,7 +10,11 @@ export const GRPC_URLS: Record<SuiNetwork, string> = {
 export const AILURUS_CONFIG = {
   defaultNetwork: (import.meta.env.VITE_SUI_NETWORK as SuiNetwork | undefined) ?? 'testnet',
   packageId: import.meta.env.VITE_AILURUS_PACKAGE_ID as string | undefined,
+  legacyPackageId:
+    (import.meta.env.VITE_AILURUS_PACKAGE_ID_LEGACY as string | undefined) ??
+    '0xe5f702358b711a236c618ed60c2e084964356e190f350f804c40396230355937',
   platformId: import.meta.env.VITE_AILURUS_PLATFORM_ID as string | undefined,
+  profileRegistryId: import.meta.env.VITE_AILURUS_PROFILE_REGISTRY_ID as string | undefined,
   usdcType: import.meta.env.VITE_AILURUS_USDC_TYPE as string | undefined,
   enokiApiKey: import.meta.env.VITE_ENOKI_PUBLIC_API_KEY as string | undefined,
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined,
@@ -34,8 +38,17 @@ export const AILURUS_CONFIG = {
     .filter(Boolean),
 };
 
+/** Seal encrypt/decrypt/session must use the package's first published ID, not an upgrade address. */
+export function getSealPackageId() {
+  return AILURUS_CONFIG.legacyPackageId ?? AILURUS_CONFIG.packageId;
+}
+
 export function hasOnChainConfig() {
   return Boolean(AILURUS_CONFIG.packageId && AILURUS_CONFIG.platformId && AILURUS_CONFIG.usdcType);
+}
+
+export function hasProfileRegistryConfig() {
+  return Boolean(AILURUS_CONFIG.profileRegistryId && AILURUS_CONFIG.packageId);
 }
 
 export function missingConfigKeys() {
@@ -43,6 +56,7 @@ export function missingConfigKeys() {
     ['VITE_AILURUS_PACKAGE_ID', AILURUS_CONFIG.packageId],
     ['VITE_AILURUS_PLATFORM_ID', AILURUS_CONFIG.platformId],
     ['VITE_AILURUS_USDC_TYPE', AILURUS_CONFIG.usdcType],
+    ['VITE_AILURUS_PROFILE_REGISTRY_ID', AILURUS_CONFIG.profileRegistryId],
   ]
     .filter(([, value]) => !value)
     .map(([key]) => key);

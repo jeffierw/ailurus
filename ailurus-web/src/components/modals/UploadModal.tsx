@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Image, Film, Upload, Lock, Globe } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { logAppError, toUserFacingMessage } from '../../lib/userFacingError';
 import { useModal } from '../../context/useModal';
 import { useAppNetwork } from '../../hooks/useAppNetwork';
 import { useEpochHint } from '../../hooks/useEpochHint';
-import { useShowUsdcDeposit } from '../../hooks/useShowUsdcDeposit';
+import { useUsdcBalance } from '../../hooks/useUsdcBalance';
 import { DEFAULT_WALRUS_EPOCHS, MAX_WALRUS_EPOCHS, clampEpochs, storageDays } from '../../lib/walrusEpochs';
 import { UploadProgressPanel } from './UploadProgressPanel';
 import {
@@ -20,7 +21,7 @@ export function UploadModal({ open }: { open: boolean }) {
   const { closeModal, appState, openModal, publishPost } = useModal();
   const { network } = useAppNetwork();
   const epochHint = useEpochHint();
-  const showUsdcDeposit = useShowUsdcDeposit();
+  const { balanceUsdc } = useUsdcBalance();
   const [type, setType] = useState<ContentType>('photo');
   const [caption, setCaption] = useState('');
   const [encrypted, setEncrypted] = useState(true);
@@ -31,6 +32,13 @@ export function UploadModal({ open }: { open: boolean }) {
     stepIndex: 0,
     steps: uploadProgressSteps(true),
   });
+
+  const handleUploadProgress = useCallback((progress: UploadProgressState) => {
+    setUploadProgress((prev) => ({
+      ...progress,
+      stepIndex: Math.max(prev.stepIndex, progress.stepIndex),
+    }));
+  }, []);
 
   const estimatedCost = type === 'video' ? 0.48 : type === 'album' ? 0.22 : 0.08;
   const selectedLabel =
@@ -58,7 +66,7 @@ export function UploadModal({ open }: { open: boolean }) {
       toast.info('Create your creator profile first');
       return;
     }
-    if (showUsdcDeposit && appState.balanceUsdc < estimatedCost) {
+    if (network === 'mainnet' && balanceUsdc < estimatedCost) {
       closeModal();
       openModal('deposit');
       toast.error('Insufficient USDC', {
@@ -98,7 +106,7 @@ export function UploadModal({ open }: { open: boolean }) {
           epochs: clampEpochs(epochs),
           files,
         },
-        { onProgress: setUploadProgress },
+        { onProgress: handleUploadProgress },
       );
       closeModal();
       toast.success(encrypted ? 'Encrypted post published!' : 'Public post published!', {
@@ -111,8 +119,9 @@ export function UploadModal({ open }: { open: boolean }) {
       setSelectedFiles([]);
       setEncrypted(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Please try again.';
-      if (message.includes('Creator profile not found')) {
+      logAppError('UploadModal', error);
+      const message = toUserFacingMessage(error);
+      if (message.includes('Set up your creator profile')) {
         closeModal();
         openModal('become-creator');
         toast.error('Register as creator first', { description: message });

@@ -1,9 +1,13 @@
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Check, Lock } from 'lucide-react';
-import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { logAppError, toUserFacingMessage } from '../../lib/userFacingError';
 import { useModal } from '../../context/useModal';
+import { useWalletAuth } from '../../hooks/useWalletAuth';
+import { formatUsdc } from '../../lib/formatUsdc';
+import { useUsdcBalance } from '../../hooks/useUsdcBalance';
 
 const perks = [
   'Unlimited access to all posts',
@@ -13,23 +17,40 @@ const perks = [
 ];
 
 export function SubscribeModal({ open }: { open: boolean }) {
-  const { modalData, closeModal, appState, openModal, subscribe } = useModal();
+  const { modalData, closeModal, openModal, subscribe } = useModal();
+  const { isLoggedIn, isConnecting } = useWalletAuth();
+  const { balanceUsdc, refetch: refetchBalance, invalidateBalance } = useUsdcBalance();
   const [isPending, setIsPending] = useState(false);
   const price = modalData.priceUsdc ?? 4.99;
   const creatorName = modalData.creatorName ?? 'Creator';
 
+  useEffect(() => {
+    if (open && isLoggedIn) {
+      void invalidateBalance();
+    }
+  }, [open, isLoggedIn, invalidateBalance]);
+
   const handleSubscribe = async () => {
-    if (!appState.isLoggedIn) {
-      closeModal();
-      openModal('login', { loginIntent: 'subscribe' });
+    if (isConnecting) {
+      toast.info('Wallet reconnecting…');
+      return;
+    }
+    if (!isLoggedIn) {
+      openModal('login', {
+        loginIntent: 'subscribe',
+        creatorId: modalData.creatorId,
+        creatorAddress: modalData.creatorAddress,
+        creatorName: modalData.creatorName,
+        priceUsdc: modalData.priceUsdc,
+      });
       toast.info('Please sign in first');
       return;
     }
-    if (appState.balanceUsdc < price) {
+    if (balanceUsdc < price) {
       closeModal();
       openModal('deposit');
       toast.error('Insufficient USDC balance', {
-        description: `You need $${price.toFixed(2)} to subscribe.`,
+        description: `You need $${price.toFixed(2)} to subscribe. Current balance: $${formatUsdc(balanceUsdc)}.`,
       });
       return;
     }
@@ -38,13 +59,15 @@ export function SubscribeModal({ open }: { open: boolean }) {
     setIsPending(true);
     try {
       await subscribe(modalData.creatorId, modalData.creatorAddress, price);
+      await invalidateBalance();
       closeModal();
       toast.success(`Subscribed to ${creatorName}!`, {
         description: `Charged $${price.toFixed(2)} USDC / month. Content unlocked.`,
       });
     } catch (error) {
+      logAppError('SubscribeModal', error);
       toast.error('Subscription failed', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserFacingMessage(error, 'Please try again.'),
       });
     } finally {
       setIsPending(false);
@@ -68,6 +91,9 @@ export function SubscribeModal({ open }: { open: boolean }) {
           <span className="text-4xl font-bold text-ink">${price.toFixed(2)}</span>
           <span className="text-muted ml-1">/ month</span>
           <p className="text-xs text-muted mt-1">Paid in USDC · No gas fees</p>
+          {isLoggedIn && (
+            <p className="text-xs text-muted mt-2">Your balance: ${formatUsdc(balanceUsdc)} USDC</p>
+          )}
         </div>
 
         <ul className="space-y-2.5 mb-6">
@@ -79,8 +105,8 @@ export function SubscribeModal({ open }: { open: boolean }) {
           ))}
         </ul>
 
-        <Button size="lg" className="w-full" onClick={handleSubscribe} disabled={isPending}>
-          {isPending ? 'Waiting for signature...' : 'Subscribe now'}
+        <Button size="lg" className="w-full" onClick={handleSubscribe} disabled={isPending || isConnecting}>
+          {isPending ? 'Waiting for signature...' : isConnecting ? 'Reconnecting wallet...' : 'Subscribe now'}
         </Button>
       </div>
     </Modal>

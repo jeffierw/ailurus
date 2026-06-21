@@ -1,12 +1,18 @@
-import { useCurrentClient } from '@mysten/dapp-kit-react';
-import { useDAppKit } from '@mysten/dapp-kit-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCurrentAccount, useCurrentClient, useWalletConnection } from '@mysten/dapp-kit-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import type { Post } from '../data/models';
-import { primaryPostMediaId } from '../lib/postMedia';
+import {
+  clearDecryptedMediaCaches,
+  getDecryptedInflightCache,
+  getDecryptedUrlCache,
+} from '../lib/decryptedMediaCache';
+import { logAppError, errorMessage } from '../lib/userFacingError';
+import { parseSealObjectId, sealMetaForMediaIndex } from '../lib/sealStorage';
 import { walrusMediaUrl } from '../lib/walrusMedia';
 import { cacheWalrusObjectUrl } from '../services/walrusMediaCache';
-import { bytesToObjectUrl, decryptWalrusMedia } from '../services/sealMedia';
+import { bytesToObjectUrl, decryptWalrusMedia, type InlineSealMeta } from '../services/sealMedia';
+import { useSealPersonalMessageSign } from './useSealPersonalMessageSign';
 
 type MediaState = {
   url: string | null;
@@ -14,8 +20,10 @@ type MediaState = {
   error: string | null;
 };
 
-const decryptedUrlCache = new Map<string, string>();
-const decryptedInflight = new Map<string, Promise<string>>();
+const decryptedUrlCache = getDecryptedUrlCache();
+const decryptedInflight = getDecryptedInflightCache();
+
+export { clearDecryptedMediaCaches };
 
 function decryptedCacheKey(mediaId: string, viewerAddress: string, creatorId: string) {
   return `${mediaId}:${viewerAddress.toLowerCase()}:${creatorId.toLowerCase()}`;
@@ -26,6 +34,7 @@ async function getDecryptedObjectUrl(options: {
   mediaId: string;
   creatorId: string;
   viewerAddress: string;
+  inlineMeta?: InlineSealMeta;
   signPersonalMessage: (message: Uint8Array) => Promise<{ signature: string }>;
 }) {
   const cacheKey = decryptedCacheKey(options.mediaId, options.viewerAddress, options.creatorId);
@@ -40,6 +49,7 @@ async function getDecryptedObjectUrl(options: {
     walrusObjectId: options.mediaId,
     creatorAddress: options.creatorId,
     viewerAddress: options.viewerAddress,
+    inlineMeta: options.inlineMeta,
     signPersonalMessage: options.signPersonalMessage,
   })
     .then(({ bytes, contentType }) => {
@@ -63,17 +73,24 @@ export function useDecryptedMedia(
   options: {
     enabled: boolean;
     viewerAddress?: string;
-    isOwnPost?: boolean;
+    canDecrypt?: boolean;
   },
 ) {
   const client = useCurrentClient();
-  const dAppKit = useDAppKit();
+  const account = useCurrentAccount();
+  const walletConnection = useWalletConnection();
+  const signPersonalMessage = useSealPersonalMessageSign();
   const clientRef = useRef(client);
-  const dAppKitRef = useRef(dAppKit);
+  const signRef = useRef(signPersonalMessage);
   clientRef.current = client;
-  dAppKitRef.current = dAppKit;
+  signRef.current = signPersonalMessage;
 
-  const mediaId = primaryPostMediaId(post.sealObjectId, post.walrusBlobId);
+  const parsedSeal = useMemo(() => parseSealObjectId(post.sealObjectId), [post.sealObjectId]);
+  const mediaId = parsedSeal.mediaIds[0] ?? post.walrusBlobId.trim();
+  const inlineMeta = useMemo(
+    () => sealMetaForMediaIndex(parsedSeal.meta, 0, mediaId),
+    [parsedSeal.meta, mediaId],
+  );
 
   const [state, setState] = useState<MediaState>(() => {
     if (!options.enabled || !mediaId) {
@@ -103,8 +120,28 @@ export function useDecryptedMedia(
       return;
     }
 
-    if (!options.viewerAddress) {
+    if (!options.canDecrypt) {
       setState({ url: null, loading: false, error: null });
+      return;
+    }
+
+    const viewerAddress = account?.address ?? options.viewerAddress;
+    if (!viewerAddress) {
+      setState({ url: null, loading: false, error: null });
+      return;
+    }
+
+    if (!account?.address) {
+      const waitingForWallet =
+        walletConnection.isConnecting ||
+        walletConnection.isReconnecting ||
+        (options.canDecrypt && Boolean(viewerAddress));
+      setState({ url: null, loading: waitingForWallet, error: null });
+      return;
+    }
+
+    if (!clientRef.current) {
+      setState({ url: null, loading: false, error: 'Wallet client not ready' });
       return;
     }
 
@@ -113,11 +150,9 @@ export function useDecryptedMedia(
       client: clientRef.current as SuiGrpcClient,
       mediaId,
       creatorId: post.creatorId,
-      viewerAddress: options.viewerAddress,
-      signPersonalMessage: async (message) => {
-        const result = await dAppKitRef.current.signPersonalMessage({ message });
-        return { signature: result.signature };
-      },
+      viewerAddress,
+      inlineMeta,
+      signPersonalMessage: (message) => signRef.current(message),
     })
       .then((objectUrl) => {
         if (cancelled) return;
@@ -125,17 +160,29 @@ export function useDecryptedMedia(
       })
       .catch((error) => {
         if (cancelled) return;
+        logAppError('useDecryptedMedia', error);
         setState({
           url: null,
           loading: false,
-          error: error instanceof Error ? error.message : 'Could not decrypt media',
+          error: errorMessage(error, 'Could not decrypt media'),
         });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [mediaId, options.enabled, options.viewerAddress, post.creatorId, post.isLocked]);
+  }, [
+    account?.address,
+    mediaId,
+    inlineMeta,
+    options.canDecrypt,
+    options.enabled,
+    options.viewerAddress,
+    post.creatorId,
+    post.isLocked,
+    walletConnection.isConnecting,
+    walletConnection.isReconnecting,
+  ]);
 
   return state;
 }

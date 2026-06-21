@@ -7,6 +7,7 @@ import { useAppNetwork } from '../hooks/useAppNetwork';
 import { useCreatorPosts } from '../hooks/usePlatformData';
 import { clampEpochs, storageDays } from '../lib/walrusEpochs';
 import { fetchCreatorWalrusStorageItems } from '../services/walrusBlobObjects';
+import { logAppError, toUserFacingMessage } from '../lib/userFacingError';
 import { Button } from './ui/Button';
 
 export function CreatorStoragePanel() {
@@ -43,8 +44,9 @@ export function CreatorStoragePanel() {
         description: `≈ ${storageDays(epochs, network)} more day(s) on ${network}`,
       });
     } catch (error) {
+      logAppError('CreatorStoragePanel', error);
       toast.error('Extend failed', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserFacingMessage(error, 'Please try again.'),
       });
     } finally {
       setExtendingId(null);

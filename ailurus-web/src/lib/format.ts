@@ -35,6 +35,9 @@ export function bytesToString(value: unknown): string {
     }
     return value;
   }
+  if (value instanceof Uint8Array) {
+    return new TextDecoder().decode(value);
+  }
   if (Array.isArray(value)) {
     return new TextDecoder().decode(new Uint8Array(value as number[]));
   }

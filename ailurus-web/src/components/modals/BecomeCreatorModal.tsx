@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { Avatar } from '../ui/Avatar';
 import { useModal } from '../../context/useModal';
 import { creatorAvatar } from '../../lib/format';
+import { logAppError, toUserFacingMessage } from '../../lib/userFacingError';
 
 export function BecomeCreatorModal({ open }: { open: boolean }) {
   const { closeModal, appState, openModal, registerCreator } = useModal();
@@ -42,7 +43,7 @@ export function BecomeCreatorModal({ open }: { open: boolean }) {
         avatarPayload = await fileToUploadInput(avatarFile);
       }
 
-      await registerCreator({
+      const { skippedOnChainRegistration } = await registerCreator({
         name: name.trim(),
         handle: handle.trim().startsWith('@') ? handle.trim() : `@${handle.trim()}`,
         bio: bio.trim(),
@@ -50,17 +51,23 @@ export function BecomeCreatorModal({ open }: { open: boolean }) {
         avatarFile: avatarPayload,
       });
       closeModal();
-      toast.success("You're a creator now!", {
-        description: 'Your profile is ready for Walrus uploads.',
-      });
+      toast.success(
+        skippedOnChainRegistration ? 'Creator profile ready' : "You're a creator now!",
+        {
+          description: skippedOnChainRegistration
+            ? 'Your existing on-chain profile has been synced.'
+            : 'Your profile is ready for Walrus uploads.',
+        },
+      );
       setName('');
       setHandle('');
       setBio('');
       setPriceUsdc('');
       handleAvatarChange(null);
     } catch (error) {
+      logAppError('BecomeCreatorModal', error);
       toast.error('Creator registration failed', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserFacingMessage(error, 'Please try again.'),
       });
     } finally {
       setIsPending(false);

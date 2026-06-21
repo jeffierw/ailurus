@@ -1,21 +1,12 @@
 import { AILURUS_CONFIG, GRPC_URLS, SUI_NETWORKS, type SuiNetwork } from '../sui/config';
 
-const NETWORK_STORAGE_KEY = 'ailurus:network';
-
+/** Network selection follows dApp Kit — no browser localStorage. */
 export function getStoredNetwork(): SuiNetwork {
-  try {
-    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-    if (stored && SUI_NETWORKS.includes(stored as SuiNetwork)) {
-      return stored as SuiNetwork;
-    }
-  } catch {
-    // ignore
-  }
-  return AILURUS_CONFIG.defaultNetwork;
+  return AILURUS_CONFIG.defaultNetwork === 'mainnet' ? 'testnet' : AILURUS_CONFIG.defaultNetwork;
 }
 
-export function setStoredNetwork(network: SuiNetwork) {
-  localStorage.setItem(NETWORK_STORAGE_KEY, network);
+export function setStoredNetwork(_network: SuiNetwork) {
+  // Network persistence is handled by dApp Kit wallet state.
 }
 
 export function getNetworkConfig(network: SuiNetwork) {
@@ -31,6 +22,10 @@ export function getNetworkConfig(network: SuiNetwork) {
       ? (import.meta.env.VITE_AILURUS_PLATFORM_ID_MAINNET as string | undefined) ??
         AILURUS_CONFIG.platformId
       : AILURUS_CONFIG.platformId,
+    profileRegistryId: isMainnet
+      ? (import.meta.env.VITE_AILURUS_PROFILE_REGISTRY_ID_MAINNET as string | undefined) ??
+        AILURUS_CONFIG.profileRegistryId
+      : AILURUS_CONFIG.profileRegistryId,
     usdcType: isMainnet
       ? (import.meta.env.VITE_AILURUS_USDC_TYPE_MAINNET as string | undefined) ??
         AILURUS_CONFIG.usdcType

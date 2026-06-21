@@ -1,23 +1,31 @@
+import { useCurrentAccount, useCurrentClient } from '@mysten/dapp-kit-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BadgeCheck, Lock } from 'lucide-react';
+import { BadgeCheck } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { Button } from '../components/ui/Button';
+import { SubscriberLockBadge } from '../components/ui/SubscriberLockBadge';
 import { PostMedia } from '../components/feed/PostMedia';
 import { useModal } from '../context/useModal';
 import { formatCount } from '../lib/format';
-import { getAvatarWalrusId, resolveAddressBySlug } from '../lib/profileStorage';
 import { isSuiAddress, RESERVED_USERNAMES } from '../lib/routes';
+import { resolveSlugToAddress } from '../sui/profileRegistry';
+import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import {
   useCreatorModel,
   useCreatorPosts,
   useIsSubscribedTo,
   useResolvedCreator,
 } from '../hooks/usePlatformData';
+import { useOwnAvatarWalrusId } from '../hooks/useOwnAvatarWalrusId';
+import { useWalletAuth } from '../hooks/useWalletAuth';
 
 export function UserProfilePage() {
   const { slug } = useParams<{ slug: string }>();
+  const account = useCurrentAccount();
+  const client = useCurrentClient();
   const { appState, openModal, chainConfigured } = useModal();
+  const { isConnecting, isAuthLoading } = useWalletAuth();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [loadingSlug, setLoadingSlug] = useState(true);
 
@@ -25,7 +33,7 @@ export function UserProfilePage() {
   const { creator: mappedCreator } = useCreatorModel(slug);
   const creatorAddress = onChainCreator?.owner ?? resolvedAddress;
   const { posts: creatorPosts, isLoading: loadingPosts } = useCreatorPosts(creatorAddress);
-  const isSubscribedOnChain = useIsSubscribedTo(creatorAddress ?? undefined, appState.address);
+  const isSubscribedOnChain = useIsSubscribedTo(creatorAddress ?? undefined, account?.address);
 
   useEffect(() => {
     if (!slug) return;
@@ -38,21 +46,29 @@ export function UserProfilePage() {
 
     if (isSuiAddress(slug)) {
       setResolvedAddress(slug);
-    } else {
-      setResolvedAddress(resolveAddressBySlug(slug));
+      setLoadingSlug(false);
+      return;
     }
-    setLoadingSlug(false);
-  }, [slug]);
+
+    void resolveSlugToAddress(client as SuiGrpcClient, slug)
+      .then((result) => {
+        setResolvedAddress(result?.address ?? null);
+      })
+      .finally(() => {
+        setLoadingSlug(false);
+      });
+  }, [client, slug]);
 
   const creator = mappedCreator;
   const resolvedFromChain = onChainCreator?.owner ?? resolvedAddress;
-
+  const viewerAddress = account?.address?.toLowerCase();
   const isOwnProfile =
-    resolvedFromChain &&
-    appState.address &&
-    resolvedFromChain.toLowerCase() === appState.address.toLowerCase();
+    Boolean(viewerAddress) &&
+    (resolvedFromChain?.toLowerCase() === viewerAddress ||
+      creator?.address.toLowerCase() === viewerAddress);
+  const ownAvatarWalrusId = useOwnAvatarWalrusId(isOwnProfile ? resolvedFromChain : null);
 
-  const loading = loadingSlug || (chainConfigured && loadingCreator);
+  const loading = loadingSlug || (chainConfigured && loadingCreator) || isConnecting || isAuthLoading;
 
   if (loading) {
     return <div className="text-center py-20 text-muted text-sm">Loading profile...</div>;
@@ -81,7 +97,7 @@ export function UserProfilePage() {
       <div className="max-w-lg mx-auto md:max-w-xl px-4 md:px-0 py-8 text-center">
         <Avatar
           src={`https://api.dicebear.com/9.x/thumbs/svg?seed=${resolvedFromChain}`}
-          walrusMediaId={isOwnProfile ? getAvatarWalrusId(resolvedFromChain) : undefined}
+          walrusMediaId={isOwnProfile ? ownAvatarWalrusId : undefined}
           alt={displayName}
           size="xl"
           className="mx-auto mb-4"
@@ -104,10 +120,9 @@ export function UserProfilePage() {
 
   if (!creator) return null;
 
-  const isSubscribed =
-    isSubscribedOnChain ||
-    Boolean(isOwnProfile) ||
-    appState.subscribedCreators.includes(creator.id);
+  const isSubscribed = isSubscribedOnChain || Boolean(isOwnProfile);
+  const canAccessLockedContent =
+    Boolean(account?.address) && (isSubscribedOnChain || Boolean(isOwnProfile));
 
   return (
     <div className="max-w-lg mx-auto md:max-w-xl">
@@ -176,7 +191,7 @@ export function UserProfilePage() {
 
       <div className="grid grid-cols-3 gap-0.5 border-t border-border">
         {creatorPosts.map((post) => {
-          const locked = post.isLocked && !isSubscribed;
+          const locked = post.isLocked && !canAccessLockedContent;
           return (
             <button
               key={post.id}
@@ -186,15 +201,15 @@ export function UserProfilePage() {
             >
               <PostMedia
                 post={post}
-                aspect="aspect-square"
+                fill
                 className="absolute inset-0"
                 showPreview={!locked}
-                viewerAddress={appState.address}
-                canDecrypt={Boolean(isOwnProfile) || isSubscribed}
+                viewerAddress={account?.address}
+                canDecrypt={canAccessLockedContent}
               />
               {locked && (
-                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-white" />
+                <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none">
+                  <SubscriberLockBadge size="sm" />
                 </div>
               )}
             </button>

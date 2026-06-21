@@ -1,11 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { Bell, Wallet } from 'lucide-react';
 import { useModal } from '../../context/useModal';
+import { useWalletAuth } from '../../hooks/useWalletAuth';
+import { formatUsdc } from '../../lib/formatUsdc';
+import { useUsdcBalance } from '../../hooks/useUsdcBalance';
 import { Button } from '../ui/Button';
 
 export function TopBar() {
   const navigate = useNavigate();
-  const { appState, openModal } = useModal();
+  const { openModal } = useModal();
+  const { isLoggedIn, isConnecting } = useWalletAuth();
+  const { balanceUsdc } = useUsdcBalance();
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between px-4 h-16 border-b border-border bg-cream/90 backdrop-blur-xl md:hidden">
@@ -14,7 +19,9 @@ export function TopBar() {
       </button>
 
       <div className="flex items-center gap-2">
-        {appState.isLoggedIn ? (
+        {isConnecting ? (
+          <span className="text-xs text-muted px-2">Connecting…</span>
+        ) : isLoggedIn ? (
           <>
             <button
               type="button"
@@ -22,7 +29,7 @@ export function TopBar() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface border border-border text-sm font-semibold"
             >
               <Wallet className="w-4 h-4 text-panda" />
-              ${appState.balanceUsdc.toFixed(2)}
+              ${formatUsdc(balanceUsdc)}
             </button>
             <button
               type="button"

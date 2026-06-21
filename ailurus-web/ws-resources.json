@@ -1,0 +1,22 @@
+{
+  "headers": {
+    "/assets/*": {
+      "Cache-Control": "public, max-age=31536000, immutable"
+    },
+    "/index.html": {
+      "Content-Security-Policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: wss: blob: data:; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: wss:; font-src 'self' https: data:; frame-src 'self' https:;"
+    }
+  },
+  "routes": {
+    "/*": "/index.html"
+  },
+  "metadata": {
+    "link": "https://ailurus.wal.app",
+    "image_url": null,
+    "description": "Creator subscriptions on Sui — Walrus storage, Seal encryption, USDC payments.",
+    "project_url": null,
+    "creator": null
+  },
+  "site_name": "Ailurus",
+  "object_id": "0x6f327c0d40482b355fb603f28a780570a290829805d8ce1bd2d1a34cce4bfdbd"
+}

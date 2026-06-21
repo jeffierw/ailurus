@@ -7,6 +7,7 @@ import { formatCount } from '../../lib/format';
 import { openShareToX } from '../../lib/share';
 import { usePostEngagement } from '../../hooks/useEngagement';
 import { useModal } from '../../context/useModal';
+import { logAppError, toUserFacingMessage } from '../../lib/userFacingError';
 
 type PostEngagementBarProps = {
   post: Post;
@@ -30,7 +31,8 @@ export function PostEngagementBar({ post, onCommentClick, compact = false }: Pos
       return;
     }
     void action().catch((error) => {
-      toast.error(error instanceof Error ? error.message : 'Action failed');
+      logAppError('PostEngagementBar', error);
+      toast.error(toUserFacingMessage(error, 'Action failed'));
     });
   };
 

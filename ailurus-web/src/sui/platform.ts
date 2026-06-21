@@ -1,9 +1,9 @@
 import type { SuiGrpcClient } from '@mysten/sui/grpc';
 import type { Creator, Post, PostContentType } from '../data/models';
 import { bytesToString, creatorAvatar, formatRelativeTime, gradientForSeed, unwrapMoveFields } from '../lib/format';
-import { loadProfile } from '../lib/profileStorage';
 import { normalizeUsername } from '../lib/routes';
 import { AILURUS_CONFIG } from './config';
+import { fetchCreatorAvatarMap } from './creatorAvatars';
 
 export type OnChainCreator = {
   owner: string;
@@ -39,6 +39,8 @@ export type PlatformSnapshot = {
   creators: OnChainCreator[];
   posts: OnChainPost[];
   subscriptions: OnChainSubscription[];
+  /** Lowercase creator owner address → Walrus media id. */
+  creatorAvatars: Record<string, string>;
 };
 
 type CreatorFields = {
@@ -191,13 +193,16 @@ function contentTypeFromMove(value: number): PostContentType {
 export async function fetchPlatformSnapshot(client: SuiGrpcClient): Promise<PlatformSnapshot> {
   const platformId = AILURUS_CONFIG.platformId;
   if (!platformId) {
-    return { creators: [], posts: [], subscriptions: [] };
+    return { creators: [], posts: [], subscriptions: [], creatorAvatars: {} };
   }
 
-  const obj = await client.getObject({
-    objectId: platformId,
-    include: { json: true },
-  });
+  const [obj, creatorAvatars] = await Promise.all([
+    client.getObject({
+      objectId: platformId,
+      include: { json: true },
+    }),
+    fetchCreatorAvatarMap(client),
+  ]);
 
   const json = obj.object?.json as PlatformJson | null | undefined;
   const root = json?.fields ?? json;
@@ -211,7 +216,7 @@ export async function fetchPlatformSnapshot(client: SuiGrpcClient): Promise<Plat
     .map(parseSubscription)
     .filter((sub): sub is OnChainSubscription => sub !== null);
 
-  return { creators, posts, subscriptions };
+  return { creators, posts, subscriptions, creatorAvatars };
 }
 
 export async function fetchPlatformCreators(client: SuiGrpcClient): Promise<OnChainCreator[]> {
@@ -240,16 +245,20 @@ export function microsToUsdc(micros: bigint) {
   return Number(micros) / 1_000_000;
 }
 
-export function toCreatorModel(onChain: OnChainCreator): Creator {
-  const profile = loadProfile(onChain.owner);
+export function normalizeCreatorAddress(address: string) {
+  const hex = address.slice(2).toLowerCase();
+  return `0x${hex.padStart(64, '0')}`;
+}
+
+export function toCreatorModel(onChain: OnChainCreator, avatarWalrusId?: string): Creator {
   return {
     id: onChain.owner,
     address: onChain.owner,
-    name: profile.displayName ?? onChain.name,
+    name: onChain.name,
     handle: onChain.handle.startsWith('@') ? onChain.handle : `@${onChain.handle}`,
     avatar: creatorAvatar(onChain.owner),
-    avatarWalrusId: profile.avatarWalrusId,
-    bio: profile.bio ?? onChain.bio,
+    avatarWalrusId: avatarWalrusId || undefined,
+    bio: onChain.bio,
     subscribers: onChain.subscriberCount,
     posts: onChain.postCount,
     priceUsdc: microsToUsdc(onChain.priceMicros),
@@ -282,7 +291,10 @@ export function buildFeedPosts(snapshot: PlatformSnapshot): Post[] {
 
 export function buildAllPosts(snapshot: PlatformSnapshot): Post[] {
   const creatorByAddress = new Map(
-    snapshot.creators.map((creator) => [creator.owner.toLowerCase(), toCreatorModel(creator)]),
+    snapshot.creators.map((creator) => [
+      creator.owner.toLowerCase(),
+      toCreatorModel(creator, snapshot.creatorAvatars[normalizeCreatorAddress(creator.owner)]),
+    ]),
   );
 
   return snapshot.posts.flatMap((post) => {

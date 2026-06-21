@@ -11,6 +11,7 @@ import {
   fetchPlatformSnapshot,
   hasActiveSubscription,
   PLATFORM_QUERY_KEY,
+  normalizeCreatorAddress,
   toCreatorModel,
   type OnChainCreator,
   type PlatformSnapshot,
@@ -37,7 +38,10 @@ export function usePlatformPosts() {
 export function usePlatformCreators() {
   const query = usePlatformSnapshot();
   const creators = useMemo(
-    () => query.data?.creators.map(toCreatorModel) ?? [],
+    () =>
+      query.data?.creators.map((creator) =>
+        toCreatorModel(creator, query.data.creatorAvatars[normalizeCreatorAddress(creator.owner)]),
+      ) ?? [],
     [query.data],
   );
   return { ...query, creators };
@@ -82,8 +86,14 @@ export function useCreatorModel(slug?: string | null): {
   isLoading: boolean;
 } {
   const query = useResolvedCreator(slug);
+  const snapshot = usePlatformSnapshot();
   return {
-    creator: query.data ? toCreatorModel(query.data) : null,
+    creator: query.data
+      ? toCreatorModel(
+          query.data,
+          snapshot.data?.creatorAvatars[normalizeCreatorAddress(query.data.owner)],
+        )
+      : null,
     isLoading: query.isLoading,
   };
 }
@@ -92,6 +102,16 @@ export function useIsSubscribedTo(creatorAddress?: string | null, viewerAddress?
   const { data } = usePlatformSnapshot();
   if (!creatorAddress || !viewerAddress || !data) return false;
   return hasActiveSubscription(data.subscriptions, viewerAddress, creatorAddress);
+}
+
+export function useActiveSubscriptionCount(viewerAddress?: string | null) {
+  const { data } = usePlatformSnapshot();
+  if (!viewerAddress || !data) return 0;
+  const normalized = viewerAddress.toLowerCase();
+  return data.subscriptions.filter(
+    (subscription) =>
+      subscription.fan.toLowerCase() === normalized && subscription.expiresAtMs > Date.now(),
+  ).length;
 }
 
 export function usePostById(postId?: string | null): Post | null {

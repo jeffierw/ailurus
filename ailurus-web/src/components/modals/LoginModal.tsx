@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { logAppError, toUserFacingMessage } from '../../lib/userFacingError';
 import { useModal } from '../../context/useModal';
 
 export function LoginModal({ open }: { open: boolean }) {
@@ -11,8 +12,9 @@ export function LoginModal({ open }: { open: boolean }) {
       await login();
       closeModal();
     } catch (error) {
+      logAppError('LoginModal', error);
       toast.error('Google sign-in failed', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserFacingMessage(error, 'Please try again.'),
       });
     }
   };

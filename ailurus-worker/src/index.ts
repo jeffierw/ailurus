@@ -21,11 +21,14 @@ type Env = {
   ALLOWED_ORIGINS?: string;
   AILURUS_PACKAGE_ID: string;
   AILURUS_PLATFORM_ID: string;
+  AILURUS_PROFILE_REGISTRY_ID?: string;
   WAL_TYPE?: string;
   WAL_MAX_DRIP_AMOUNT?: string;
   SUI_MAX_DRIP_AMOUNT?: string;
   WALRUS_PACKAGE_ID?: string;
   WALRUS_UPLOAD_RELAY_TIP_ADDRESS?: string;
+  USDC_TYPE?: string;
+  USDC_MAX_DRIP_AMOUNT?: string;
 };
 
 const HEX_ADDRESS = /^0x[a-fA-F0-9]{1,64}$/;
@@ -39,6 +42,9 @@ const SUI_FRAMEWORK_PKG =
   '0x0000000000000000000000000000000000000000000000000000000000000002';
 const DEFAULT_MAX_WAL_DRIP_AMOUNT = 200_000_000n;
 const DEFAULT_MAX_SUI_DRIP_AMOUNT = 1_000_000_000n;
+const DEFAULT_USDC_TYPE =
+  '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
+const DEFAULT_MAX_USDC_DRIP_AMOUNT = 1_000_000n;
 const TESTNET_RPC_URL = 'https://fullnode.testnet.sui.io:443';
 const SUI_COIN_TYPE = '0x2::sui::SUI';
 
@@ -84,6 +90,11 @@ const testnetUploadFundsSchema = z
     { message: 'At least one of walAmount or suiAmount must be positive' },
   );
 
+const testnetUsdcSchema = z.object({
+  recipient: z.string().regex(HEX_ADDRESS),
+  amount: z.string().regex(/^[1-9][0-9]*$/),
+});
+
 const engagementLikeSchema = z.object({
   postId: z.string().min(1),
   address: z.string().regex(HEX_ADDRESS),
@@ -128,6 +139,10 @@ export default {
 
       if (url.pathname === '/testnet/upload-funds' && request.method === 'POST') {
         return await dripTestnetUploadFunds(request, env, corsHeaders);
+      }
+
+      if (url.pathname === '/testnet/usdc' && request.method === 'POST') {
+        return await dripTestnetUsdc(request, env, corsHeaders);
       }
 
       if (url.pathname === '/engagement' && request.method === 'GET') {
@@ -208,6 +223,7 @@ async function createSponsoredTransaction(
     allowedMoveCallTargets: allowedMoveCallTargets(env),
     allowedAddresses: uniqueAddresses([
       env.AILURUS_PLATFORM_ID,
+      env.AILURUS_PROFILE_REGISTRY_ID,
       env.WALRUS_UPLOAD_RELAY_TIP_ADDRESS ?? DEFAULT_UPLOAD_RELAY_TIP_ADDRESS,
       ...(body.extraAllowedAddresses ?? []),
     ]),
@@ -251,10 +267,11 @@ async function dripTestnetWal(request: Request, env: Env, headers: HeadersInit) 
 
 async function dripTestnetUploadFunds(request: Request, env: Env, headers: HeadersInit) {
   if (env.SUI_NETWORK !== 'testnet') {
-    return json({ error: 'Testnet upload funding is only available on testnet' }, headers, 400);
+    return json({ error: 'Upload credits are only available on testnet.' }, headers, 400);
   }
   if (!env.WAL_FAUCET_SECRET_KEY) {
-    return json({ error: 'Upload faucet wallet is not configured' }, headers, 503);
+    console.error('[ailurus-worker] WAL_FAUCET_SECRET_KEY is not configured');
+    return json({ error: 'Upload credits are temporarily unavailable.' }, headers, 503);
   }
 
   const body = testnetUploadFundsSchema.parse(await request.json());
@@ -269,59 +286,43 @@ async function dripTestnetUploadFunds(request: Request, env: Env, headers: Heade
   const recipient = normalizeAddress(body.recipient);
 
   if (walAmount > maxWalAmount) {
-    return json(
-      {
-        error: 'Requested WAL amount exceeds faucet limit',
-        requested: walAmount.toString(),
-        maxAmount: maxWalAmount.toString(),
-      },
-      headers,
-      400,
-    );
+    console.error('[ailurus-worker] WAL drip exceeds limit', {
+      requested: walAmount.toString(),
+      maxAmount: maxWalAmount.toString(),
+    });
+    return json({ error: 'Requested upload credits exceed the current limit.' }, headers, 400);
   }
 
   if (suiAmount > maxSuiAmount) {
-    return json(
-      {
-        error: 'Requested SUI amount exceeds faucet limit',
-        requested: suiAmount.toString(),
-        maxAmount: maxSuiAmount.toString(),
-      },
-      headers,
-      400,
-    );
+    console.error('[ailurus-worker] SUI drip exceeds limit', {
+      requested: suiAmount.toString(),
+      maxAmount: maxSuiAmount.toString(),
+    });
+    return json({ error: 'Requested upload credits exceed the current limit.' }, headers, 400);
   }
 
   if (suiAmount > 0n) {
     const suiBalance = await client.getBalance({ owner: faucetAddress, coinType: SUI_COIN_TYPE });
     if (BigInt(suiBalance.totalBalance) < suiAmount) {
-      return json(
-        {
-          error: 'Upload faucet wallet has insufficient SUI balance',
-          faucetAddress,
-          required: suiAmount.toString(),
-          available: suiBalance.totalBalance,
-        },
-        headers,
-        503,
-      );
+      console.error('[ailurus-worker] Upload faucet insufficient SUI', {
+        faucetAddress,
+        required: suiAmount.toString(),
+        available: suiBalance.totalBalance,
+      });
+      return json({ error: 'Upload credits are temporarily unavailable.' }, headers, 503);
     }
   }
 
   if (walAmount > 0n) {
     const walBalance = await client.getBalance({ owner: faucetAddress, coinType: walType });
     if (BigInt(walBalance.totalBalance) < walAmount) {
-      return json(
-        {
-          error: 'Upload faucet wallet has insufficient WAL balance',
-          faucetAddress,
-          walType,
-          required: walAmount.toString(),
-          available: walBalance.totalBalance,
-        },
-        headers,
-        503,
-      );
+      console.error('[ailurus-worker] Upload faucet insufficient WAL', {
+        faucetAddress,
+        walType,
+        required: walAmount.toString(),
+        available: walBalance.totalBalance,
+      });
+      return json({ error: 'Upload credits are temporarily unavailable.' }, headers, 503);
     }
   }
 
@@ -357,15 +358,11 @@ async function dripTestnetUploadFunds(request: Request, env: Env, headers: Heade
   });
 
   if (result.effects?.status.status !== 'success') {
-    return json(
-      {
-        error: 'Upload funding transfer failed',
-        digest: result.digest,
-        status: result.effects?.status,
-      },
-      headers,
-      502,
-    );
+    console.error('[ailurus-worker] Upload funding transfer failed', {
+      digest: result.digest,
+      status: result.effects?.status,
+    });
+    return json({ error: 'Upload credits could not be sent. Please try again.' }, headers, 502);
   }
 
   return json(
@@ -382,9 +379,90 @@ async function dripTestnetUploadFunds(request: Request, env: Env, headers: Heade
   );
 }
 
+async function dripTestnetUsdc(request: Request, env: Env, headers: HeadersInit) {
+  if (env.SUI_NETWORK !== 'testnet') {
+    return json({ error: 'Testnet USDC is only available on testnet.' }, headers, 400);
+  }
+  if (!env.WAL_FAUCET_SECRET_KEY) {
+    console.error('[ailurus-worker] WAL_FAUCET_SECRET_KEY is not configured');
+    return json({ error: 'Testnet USDC is temporarily unavailable.' }, headers, 503);
+  }
+
+  const body = testnetUsdcSchema.parse(await request.json());
+  const usdcAmount = BigInt(body.amount);
+  const usdcType = env.USDC_TYPE ?? DEFAULT_USDC_TYPE;
+  const maxUsdcAmount = parsePositiveBigInt(env.USDC_MAX_DRIP_AMOUNT, DEFAULT_MAX_USDC_DRIP_AMOUNT);
+  const recipient = normalizeAddress(body.recipient);
+
+  if (usdcAmount > maxUsdcAmount) {
+    console.error('[ailurus-worker] USDC drip exceeds limit', {
+      requested: usdcAmount.toString(),
+      maxAmount: maxUsdcAmount.toString(),
+    });
+    return json({ error: 'Requested USDC exceeds the current limit (1 USDC).' }, headers, 400);
+  }
+
+  const client = new SuiJsonRpcClient({ url: TESTNET_RPC_URL, network: 'testnet' });
+  const signer = keypairFromSecretKey(env.WAL_FAUCET_SECRET_KEY);
+  const faucetAddress = signer.toSuiAddress();
+
+  const usdcBalance = await client.getBalance({ owner: faucetAddress, coinType: usdcType });
+  if (BigInt(usdcBalance.totalBalance) < usdcAmount) {
+    console.error('[ailurus-worker] USDC faucet insufficient balance', {
+      faucetAddress,
+      required: usdcAmount.toString(),
+      available: usdcBalance.totalBalance,
+    });
+    return json({ error: 'Testnet USDC is temporarily unavailable.' }, headers, 503);
+  }
+
+  const tx = new Transaction();
+  tx.setSender(faucetAddress);
+  const coins = await client.getCoins({ owner: faucetAddress, coinType: usdcType, limit: 50 });
+  const selected = selectCoins(coins.data, usdcAmount);
+  const primary = tx.object(selected[0].coinObjectId);
+  if (selected.length > 1) {
+    tx.mergeCoins(
+      primary,
+      selected.slice(1).map((coin) => tx.object(coin.coinObjectId)),
+    );
+  }
+  const [usdcCoin] = tx.splitCoins(primary, [tx.pure.u64(usdcAmount)]);
+  tx.transferObjects([usdcCoin], recipient);
+
+  const result = await client.signAndExecuteTransaction({
+    transaction: tx,
+    signer,
+    options: {
+      showEffects: true,
+      showBalanceChanges: true,
+    },
+  });
+
+  if (result.effects?.status.status !== 'success') {
+    console.error('[ailurus-worker] USDC drip transfer failed', {
+      digest: result.digest,
+      status: result.effects?.status,
+    });
+    return json({ error: 'Testnet USDC could not be sent. Please try again.' }, headers, 502);
+  }
+
+  return json(
+    {
+      ok: true,
+      digest: result.digest,
+      usdcAmount: usdcAmount.toString(),
+      usdcType,
+      sender: faucetAddress,
+      recipient,
+    },
+    headers,
+  );
+}
+
 async function requestTestnetFaucet(request: Request, env: Env, headers: HeadersInit) {
   if (env.SUI_NETWORK !== 'testnet') {
-    return json({ error: 'Testnet faucet is only available on testnet' }, headers, 400);
+    return json({ error: 'Testnet faucet is only available on testnet.' }, headers, 400);
   }
 
   const body = testnetFaucetSchema.parse(await request.json());
@@ -400,15 +478,11 @@ async function requestTestnetFaucet(request: Request, env: Env, headers: Headers
 
   const payload = await faucetResponse.json().catch(() => ({}));
   if (!faucetResponse.ok) {
-    return json(
-      {
-        error: 'Testnet faucet request failed',
-        status: faucetResponse.status,
-        details: payload,
-      },
-      headers,
-      faucetResponse.status >= 400 && faucetResponse.status < 600 ? faucetResponse.status : 502,
-    );
+    console.error('[ailurus-worker] Testnet faucet request failed', {
+      status: faucetResponse.status,
+      details: payload,
+    });
+    return json({ error: 'Testnet faucet is temporarily unavailable.' }, headers, 502);
   }
 
   return json(payload, headers);
@@ -458,6 +532,10 @@ function allowedMoveCallTargets(env: Env) {
     `${pkg}::platform::update_price`,
     `${pkg}::platform::publish_post`,
     `${pkg}::platform::subscribe`,
+    `${pkg}::platform::update_creator_profile`,
+    `${pkg}::platform::set_creator_avatar`,
+    `${pkg}::profile::register_fan`,
+    `${pkg}::profile::update_fan_profile`,
     `${walrusPkg}::system::reserve_space`,
     `${walrusPkg}::system::register_blob`,
     `${walrusPkg}::system::certify_blob`,
@@ -468,8 +546,14 @@ function allowedMoveCallTargets(env: Env) {
   ];
 }
 
-function uniqueAddresses(addresses: string[]) {
-  return Array.from(new Set(addresses.map((address) => normalizeAddress(address))));
+function uniqueAddresses(addresses: (string | undefined)[]) {
+  return Array.from(
+    new Set(
+      addresses
+        .filter((address): address is string => Boolean(address))
+        .map((address) => normalizeAddress(address)),
+    ),
+  );
 }
 
 function normalizeAddress(address: string) {
@@ -489,11 +573,21 @@ function getCorsHeaders(request: Request, env: Env) {
     'Vary': 'Origin',
   };
 
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && isAllowedOrigin(origin, allowedOrigins)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
 
   return headers;
+}
+
+function isAllowedOrigin(origin: string, allowedOrigins: string[]) {
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === 'https:' && hostname.endsWith('.wal.app');
+  } catch {
+    return false;
+  }
 }
 
 function json(value: unknown, headers: HeadersInit, status = 200) {
@@ -507,28 +601,19 @@ function json(value: unknown, headers: HeadersInit, status = 200) {
 }
 
 function handleError(error: unknown, headers: HeadersInit) {
+  console.error('[ailurus-worker]', error);
+
   if (error instanceof z.ZodError) {
-    return json({ error: 'Invalid request', issues: error.issues }, headers, 400);
+    return json({ error: 'Please check your request and try again.' }, headers, 400);
   }
 
   if (error instanceof EnokiClientError) {
     return json(
-      {
-        error: 'Enoki request failed',
-        status: error.status,
-        code: error.code,
-        errors: error.errors,
-      },
+      { error: 'Sign-in service is temporarily unavailable. Please try again.' },
       headers,
       error.status >= 400 && error.status < 600 ? error.status : 502,
     );
   }
 
-  return json(
-    {
-      error: error instanceof Error ? error.message : 'Unexpected error',
-    },
-    headers,
-    500,
-  );
+  return json({ error: 'Something went wrong. Please try again.' }, headers, 500);
 }
