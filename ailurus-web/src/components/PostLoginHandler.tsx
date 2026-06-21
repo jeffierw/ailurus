@@ -65,7 +65,7 @@ export function PostLoginHandler() {
       return;
     }
 
-    if (intent === 'subscribe' || intent === 'deposit' || intent === 'create') {
+    if (intent === 'subscribe' || intent === 'create') {
       if (!appState.username && !appState.isCreator) {
         openModal('username');
       }

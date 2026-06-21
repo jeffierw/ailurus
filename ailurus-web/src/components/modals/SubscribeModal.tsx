@@ -19,7 +19,7 @@ const perks = [
 export function SubscribeModal({ open }: { open: boolean }) {
   const { modalData, closeModal, openModal, subscribe } = useModal();
   const { isLoggedIn, isConnecting } = useWalletAuth();
-  const { balanceUsdc, refetch: refetchBalance, invalidateBalance } = useUsdcBalance();
+  const { balanceUsdc, invalidateBalance } = useUsdcBalance();
   const [isPending, setIsPending] = useState(false);
   const price = modalData.priceUsdc ?? 4.99;
   const creatorName = modalData.creatorName ?? 'Creator';

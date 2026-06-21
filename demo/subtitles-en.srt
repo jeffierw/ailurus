@@ -1,0 +1,95 @@
+1
+00:00:00,000 --> 00:00:08,000
+We built Ailurus for creators who want to own their audience and their payout path.
+
+2
+00:00:08,000 --> 00:00:16,000
+Centralized platforms take large cuts, control your files, and can remove you overnight.
+
+3
+00:00:16,000 --> 00:00:24,000
+Web3 alternatives ask fans for wallets, gas fees, and seed phrases — not mainstream ready.
+
+4
+00:00:24,000 --> 00:00:32,000
+Ailurus fixes this with Google login, USDC subscriptions, Walrus storage, and Seal paywalls.
+
+5
+00:00:32,000 --> 00:00:38,000
+Landing page — publish privately and get paid globally.
+
+6
+00:00:38,000 --> 00:00:46,000
+Scroll — creators keep USDC revenue; fans never see gas or WAL tokens.
+
+7
+00:00:46,000 --> 00:00:50,000
+Tap "View live demo" to enter the product on Sui Testnet.
+
+8
+00:00:50,000 --> 00:00:58,000
+Feed — browse posts from on-chain creators in a familiar social layout.
+
+9
+00:00:58,000 --> 00:01:08,000
+Not a wallet dashboard — it feels like Instagram or Threads.
+
+10
+00:01:08,000 --> 00:01:12,000
+Open Explore to discover creator profiles.
+
+11
+00:01:12,000 --> 00:01:20,000
+Discover creators registered through our Move contract on Sui.
+
+12
+00:01:20,000 --> 00:01:34,000
+Each profile shows price, posts, and subscriber-only encrypted drops.
+
+13
+00:01:34,000 --> 00:01:48,000
+Subscriber-only content stays locked until a fan pays in USDC.
+
+14
+00:01:48,000 --> 00:01:56,000
+Tap Subscribe — the Move contract records subscription state on chain.
+
+15
+00:01:56,000 --> 00:02:08,000
+USDC settles to the creator; Enoki sponsors all SUI gas fees.
+
+16
+00:02:08,000 --> 00:02:12,000
+Back to Feed — exclusive albums unlock instantly.
+
+17
+00:02:12,000 --> 00:02:26,000
+Seal decrypts media only for active subscribers.
+
+18
+00:02:26,000 --> 00:02:40,000
+Behind the UI: encrypted bytes live on Walrus; Seal enforces access policy.
+
+19
+00:02:40,000 --> 00:02:52,000
+Creators upload via Walrus SDK — Cetus swaps USDC to WAL for storage fees.
+
+20
+00:02:52,000 --> 00:03:02,000
+Our Cloudflare worker sponsors gas through Enoki with an allowlisted Move target list.
+
+21
+00:03:02,000 --> 00:03:10,000
+Identity, settlement, storage, and privacy — one product path on Sui Testnet.
+
+22
+00:03:10,000 --> 00:03:18,000
+In summary: Ailurus is a Web2-grade creator subscription layer on the full Sui stack.
+
+23
+00:03:18,000 --> 00:03:26,000
+Repo is public, contracts are live on Testnet, Mainnet target: July 2026.
+
+24
+00:03:26,000 --> 00:03:32,000
+Next: Enoki production config, creator onboarding, and analytics. Thank you.

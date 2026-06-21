@@ -1,7 +1,7 @@
 import type { Post } from '../data/models';
 
 export function postShareUrl(postId: string) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://ailurus.app';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://ailurus.wal.app';
   return `${origin}/p/${postId}`;
 }
 

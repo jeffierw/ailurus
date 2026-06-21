@@ -1,4 +1,4 @@
-import { AILURUS_CONFIG, GRPC_URLS, SUI_NETWORKS, type SuiNetwork } from '../sui/config';
+import { AILURUS_CONFIG, GRPC_URLS, type SuiNetwork } from '../sui/config';
 
 /** Network selection follows dApp Kit — no browser localStorage. */
 export function getStoredNetwork(): SuiNetwork {

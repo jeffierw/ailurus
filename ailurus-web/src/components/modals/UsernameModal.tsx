@@ -65,7 +65,7 @@ export function UsernameModal({ open }: { open: boolean }) {
       <div className="px-5 pb-6">
         <p className="text-sm text-muted mb-5 leading-relaxed">
           Pick a short URL for your profile. This is saved on Sui testnet. Fans can visit{' '}
-          <span className="font-medium text-ink">ailurus.app/{preview ?? 'yourname'}</span>
+          <span className="font-medium text-ink">ailurus.wal.app/{preview ?? 'yourname'}</span>
         </p>
         <div className="flex items-center gap-2 mb-4">
           <span className="text-sm text-muted">/</span>
